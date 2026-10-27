@@ -1,0 +1,63 @@
+CREATE COMPUTE MODULE createCustomer_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- 1. Copy headers to preserve HTTP transport context downstream
+		CALL CopyMessageHeaders();
+		
+		-- Extract request body fields
+		DECLARE reqRef REFERENCE TO InputRoot.JSON.Data;
+		DECLARE v_FirstName   CHARACTER CAST(reqRef.FirstName   AS CHARACTER);
+		DECLARE v_LastName    CHARACTER CAST(reqRef.LastName    AS CHARACTER);
+		DECLARE v_Email       CHARACTER CAST(reqRef.Email       AS CHARACTER);
+		DECLARE v_Phone       CHARACTER CAST(reqRef.Phone       AS CHARACTER);
+		DECLARE v_DateOfBirth CHARACTER CAST(reqRef.DateOfBirth AS CHARACTER);
+		DECLARE v_Status      CHARACTER CAST(reqRef.Status      AS CHARACTER);
+		DECLARE v_CustomerId  CHARACTER;
+
+		-- Generate CustomerId
+		DECLARE part1 CHARACTER CAST(CAST(RAND() * 899999 + 100000 AS INTEGER) AS CHARACTER);
+		DECLARE part2 CHARACTER CAST(CAST(RAND() * 899999 + 100000 AS INTEGER) AS CHARACTER);
+		SET v_CustomerId = 'CUS-' || part1 || part2;
+
+		DECLARE DBSchema CHARACTER 'public';
+		DECLARE DBTable  CHARACTER 'customers';
+
+		-- Insert new customer into PostgreSQL via ODBC datasource MY_PG_DSN
+		INSERT INTO Database.{DBSchema}.{DBTable}
+			(customer_id, first_name, last_name, email, phone, date_of_birth, status)
+		VALUES
+			(v_CustomerId, v_FirstName, v_LastName, v_Email, v_Phone, v_DateOfBirth, v_Status);
+
+		CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+		CREATE FIELD OutputRoot.JSON.Data;
+		DECLARE outputDataRef REFERENCE TO OutputRoot.JSON.Data;
+		
+		IF (SQLCODE = 0) THEN
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '201';
+			SET outputDataRef.status = 'success';
+			SET outputDataRef.message = 'Customer ' || v_CustomerId || ' created successfully.';
+			SET outputDataRef.customer.customer_id  = v_CustomerId;
+			SET outputDataRef.customer.first_name   = v_FirstName;
+			SET outputDataRef.customer.last_name    = v_LastName;
+			SET outputDataRef.customer.email       	= v_Email;
+			SET outputDataRef.ustomer.phone        	= v_Phone;
+			SET outputDataRef.customer.date_of_birth = v_DateOfBirth;
+			SET outputDataRef.customer.status      	= v_Status;
+		ELSE
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '500';
+			SET outputDataRef.error   = 'SQL Error';
+			SET outputDataRef.message = 'Insert failed. The database SQLSTATE was ' || CAST(SQLSTATE AS CHAR) || ' and the SQLCODE was ' || CAST(SQLCODE AS CHAR);
+		END IF;
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+END MODULE;

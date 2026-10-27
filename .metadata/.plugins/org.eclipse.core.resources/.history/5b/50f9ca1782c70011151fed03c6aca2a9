@@ -1,0 +1,8 @@
+{
+  "AccountId": "ACC-10001",
+  "Amount": 500.00,
+  "Currency": "AUD",
+  "TransactionType": "TRANSFER",
+  "Status": "COMPLETED",
+  "Description": "Loan payment"
+}

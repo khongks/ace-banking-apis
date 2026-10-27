@@ -1,0 +1,210 @@
+# Accounts REST API (IBM App Connect Enterprise)
+
+A complete REST API service for banking customers built for **IBM App Connect Enterprise (ACE)** using **ESQL** and backed by **PostgreSQL** for persistence.
+
+---
+
+## 📌 Overview
+
+This project implements the complete lifecycle for financial accounts associated with bank accounts:
+- **Create**: Add a new account (with account ID, amount, type, etc.)
+- **Retrieve**: Fetch details of a specific account by its ID
+- **Update**: Modify account details (status, description, amount, etc.)
+- **Delete**: Remove a account record
+- **List**: Query accounts with optional filtering by `accountId` and `status`
+
+### Key Highlights
+- **PostgreSQL Persistence**: Employs native ACE ESQL database queries (`INSERT`, `SELECT`, `UPDATE`, `DELETE`) referencing datasource `MY_PG_DSN`.
+- **Account Association**: Requires and validates `accountId` on all created accounts.
+- **Contract-First Design**: OpenAPI 3.0 specification (`openapi.json`) synchronized with the ACE REST API descriptor (`restapi.descriptor`).
+- **Resilient ESQL Coding**: Uses `FIELDVALUE(...)`, strict type-checking, case-tolerant property extraction, `(JSON.Array)` typing, and dual-casing fallbacks for ODBC column names.
+
+---
+
+## 📁 Project Structure
+
+```
+accounts/
+├── .project                                  # Eclipse & ACE Toolkit project definition
+├── .settings/
+│   └── org.eclipse.core.resources.prefs      # Resource encoding preferences (UTF-8)
+├── restapi.descriptor                        # ACE REST API operation mappings
+├── openapi.json                              # OpenAPI 3.0 API definition
+├── schema.sql                                # PostgreSQL DDL and seed data script
+├── skills.md                                 # Technical and integration knowledge notes
+├── README.md                                 # Project documentation and test guide
+│
+├── gen/
+│   └── Accounts.msgflow                      # Generated REST API main message flow
+│
+├── createAccount.subflow                     # Subflow: POST /v1/accounts
+├── createAccount_Compute.esql                # ESQL: Insert into PostgreSQL
+│
+├── getAccount.subflow                        # Subflow: GET /v1/accounts/{accountId}
+├── getAccount_Compute.esql                   # ESQL: Single row query
+│
+├── updateAccount.subflow                     # Subflow: PUT /v1/accounts/{accountId}
+├── updateAccount_Compute.esql                # ESQL: Database UPDATE
+│
+├── deleteAccount.subflow                     # Subflow: DELETE /v1/accounts/{accountId}
+├── deleteAccount_Compute.esql                # ESQL: Database DELETE
+│
+├── listAccounts.subflow                      # Subflow: GET /v1/accounts
+└── listAccounts_Compute.esql                 # ESQL: Multi-row query & JSON array builder
+```
+
+---
+
+## 🗄️ Database Setup (PostgreSQL)
+
+Execute `schema.sql` against your PostgreSQL database:
+
+```bash
+psql -h localhost -U postgres -d banking_db -f schema.sql
+```
+
+          "accountId",
+          "customerId",
+          "accountType",
+          "balance",
+          "currency",
+          "status"
+
+### Table Definition (`public.accounts`)
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `account_id` | `VARCHAR(64)` | `PRIMARY KEY` | Unique account ID (e.g., `TXN-xxxxxxxxxxxx`) |
+| `customer_id` | `VARCHAR(64)` | `NOT NULL` | Associated customer id |
+| `account_type` | `VARCHAR(20)` | `CHECK IN ('SAVINGS', 'CHECK', 'CREDIT')` | Type of accounts |
+| `balance` | `NUMERIC(15, 2)` | `NOT NULL` | Account balance |
+| `currency` | `VARCHAR(3)` | `NOT NULL DEFAULT 'AUD'` | Currency ISO code |
+| `status` | `VARCHAR(20)` | `CHECK IN ('ACTIVE', 'INACTIVE')` | Account status |
+
+### ACE ODBC Runtime Configuration
+
+1. In `/var/mqsi/odbc/odbc.ini` (or `$ODBCINI`):
+```ini
+[ODBC Data Sources]
+MY_PG_DSN=PostgreSQL Wire Protocol
+
+[MY_PG_DSN]
+Driver=/opt/ibm/ace-12.0.12.0/server/ODBC/drivers/lib/UKsqls95.so
+Description=IBM App Connect Enterprise PostgreSQL Wire Protocol
+Database=banking_db
+HostName=localhost
+PortNumber=5432
+LogonID=postgres
+Password=secret
+```
+
+2. Register credentials with the ACE Integration Node:
+```bash
+mqsisetdbparms <IntegrationNodeName> -n odbc::MY_PG_DSN -u postgres -p secret
+mqsicvp <IntegrationNodeName> -n MY_PG_DSN
+```
+
+---
+
+## 🚀 API Endpoints & Testing
+
+Base path: `/v1/accounts`
+
+### 1. Create Account
+- **Method**: `POST`
+- **Path**: `/v1/accounts/`
+- **Request Body**:
+```json
+{
+  "customerId": "CUS-10001",
+  "accountType": "SAVINGS",
+  "balance": 5200.50,
+  "currency": "AUD",
+  "status": "ACTIVE"
+}
+```
+- **Curl**:
+```bash
+curl -X POST http://localhost:7800/v1/accounts/ \
+  -H "Content-Type: application/json" \
+  -d '{
+  	"customerId": "CUS-10001",
+  	"accountType": "SAVINGS",
+  	"balance": 5200.50,
+  	"currency": "AUD",
+  	"status": "ACTIVE"
+  }'
+```
+- **Response**: `201 Created`
+
+---
+
+### 2. Retrieve Account by ID
+- **Method**: `GET`
+- **Path**: `/v1/accounts/{accountId}`
+- **Curl**:
+```bash
+curl -X GET http://localhost:7800/v1/accounts/ACC-1001
+```
+- **Response**: `200 OK`
+```json
+{
+  "accountId": "ACC-10001",
+  "customerId": "CUS-10001",
+  "accountType": "SAVINGS",
+  "balance": 5200.50,
+  "currency": "AUD",
+  "status": "ACTIVE"
+}
+```
+
+---
+
+### 3. Update Account by ID
+- **Method**: `PUT`
+- **Path**: `/v1/accounts/{accountId}`
+- **Request Body**:
+```json
+{
+  "status": "INACTIVE"
+}
+```
+- **Curl**:
+```bash
+curl -X PUT http://localhost:7800/v1/accounts/ACC-1001 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "INACTIVE"
+  }'
+```
+- **Response**: `200 OK`
+
+---
+
+### 4. Delete Account by ID
+- **Method**: `DELETE`
+- **Path**: `/v1/accounts/{accountId}`
+- **Curl**:
+```bash
+curl -X DELETE http://localhost:7800/v1/accounts/ACC-1001
+```
+- **Response**: `204 No Content` (Empty body)
+
+---
+
+### 5. List All Accounts (with Filters)
+- **Method**: `GET`
+- **Path**: `/v1/accounts/`
+- **Query Parameters**:
+  - `accountId` (optional): e.g. `?customerId=CUS-1001`
+  - `status` (optional): e.g. `?status=COMPLETED`
+- **Curl**:
+```bash
+# List all accounts
+curl -X GET http://localhost:7800/v1/accounts/
+# Filter by account ID
+curl -X GET "http://localhost:7800/v1/accounts?customerId=CUS-1001"
+
+# Filter by account ID and status
+curl -X GET "http://localhost:7800/v1/accounts?customerId=CUS-1001&status=ACTIVE"
+```
+- **Response**: `200 OK` (Array of accounts)

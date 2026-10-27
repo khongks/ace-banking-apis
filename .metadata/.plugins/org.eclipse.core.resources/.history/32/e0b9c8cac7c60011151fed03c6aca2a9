@@ -1,0 +1,49 @@
+CREATE COMPUTE MODULE getCustomer_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- Retrieve customerId from the HTTP path parameter
+		DECLARE v_CustomerId CHARACTER InputLocalEnvironment.REST.Input.Parameters.customerId;
+
+		DECLARE DBSchema CHARACTER 'public';
+		DECLARE DBTable  CHARACTER 'customers';
+
+		-- Query customer by ID from PostgreSQL via ODBC datasource MY_PG_DSN
+		DECLARE customer ROW;
+		SET customer.Record[] = SELECT
+			C.customer_id   AS CustomerId,
+			C.first_name    AS FirstName,
+			C.last_name     AS LastName,
+			C.email         AS Email,
+			C.phone         AS Phone,
+			C.date_of_birth AS DateOfBirth,
+			C.status        AS Status
+		FROM Database.{DBSchema}.{DBTable} AS C
+		WHERE C.customer_id = v_CustomerId;
+
+		CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+		CREATE FIELD OutputRoot.JSON.Data;
+
+		IF (SQLCODE = 0) THEN
+			IF CARDINALITY(customer.Record[]) > 0 THEN
+				SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '200';
+				SET OutputRoot.JSON.Data.CustomerId  = customer.Record[1].CustomerId;
+				SET OutputRoot.JSON.Data.FirstName   = customer.Record[1].FirstName;
+				SET OutputRoot.JSON.Data.LastName    = customer.Record[1].LastName;
+				SET OutputRoot.JSON.Data.Email       = customer.Record[1].Email;
+				SET OutputRoot.JSON.Data.Phone       = customer.Record[1].Phone;
+				SET OutputRoot.JSON.Data.DateOfBirth = customer.Record[1].DateOfBirth;
+				SET OutputRoot.JSON.Data.Status      = customer.Record[1].Status;
+			ELSE
+				SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '404';
+				SET OutputRoot.JSON.Data.error   = 'Not found';
+				SET OutputRoot.JSON.Data.message = 'Customer ' || v_CustomerId || ' not found';
+			END IF;
+		ELSE
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '500';
+			SET OutputRoot.JSON.Data.error   = 'SQL Error';
+			SET OutputRoot.JSON.Data.message = 'Select operation failed. The database SQLSTATE was ' || CAST(SQLSTATE AS CHAR) || ' and the SQLCODE was ' || CAST(SQLCODE AS CHAR);
+		END IF;
+
+		RETURN TRUE;
+	END;
+END MODULE;

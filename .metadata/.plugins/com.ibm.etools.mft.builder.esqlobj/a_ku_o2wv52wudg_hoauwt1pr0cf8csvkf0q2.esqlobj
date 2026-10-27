@@ -1,0 +1,15 @@
+CREATE COMPUTE MODULE listAccounts_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- Build JSON array response
+		SET OutputRoot.Properties = InputRoot.Properties;
+		CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+		CREATE FIELD OutputRoot.JSON.Data IDENTITY (JSON.Array)Data;
+
+		-- Iterate all rows from PostgreSQL via ODBC datasource MY_PG_DSN
+		
+		OutputRoot.JSON.Data[] = (SELECT A FROM Database.accounts as A);
+
+		RETURN TRUE;
+	END;
+END MODULE;

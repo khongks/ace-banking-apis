@@ -1,0 +1,125 @@
+CREATE COMPUTE MODULE createTransaction_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- 1. Copy headers to preserve HTTP transport context downstream
+		CALL CopyMessageHeaders();
+		
+		-- 2. Establish input reference
+		DECLARE inputDataRef REFERENCE TO InputRoot.JSON.Data;
+		IF NOT LASTMOVE(inputDataRef) THEN
+			SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 400;
+			CREATE FIELD OutputRoot.JSON.Data;
+			SET OutputRoot.JSON.Data.error = 'Bad Request';
+			SET OutputRoot.JSON.Data.message = 'No JSON data found in input message.';
+			RETURN TRUE;
+		END IF;
+		
+		-- 3. Extract and map input data fields using FIELDVALUE
+		DECLARE v_AccountId CHARACTER FIELDVALUE(inputDataRef.accountId);
+		DECLARE v_Amount DECIMAL FIELDVALUE(inputDataRef.amount);
+		DECLARE v_TransactionType CHARACTER FIELDVALUE(inputDataRef.transactionType);
+		DECLARE v_Currency CHARACTER COALESCE(FIELDVALUE(inputDataRef.currency), 'USD');
+		DECLARE v_Status CHARACTER COALESCE(FIELDVALUE(inputDataRef.status), 'COMPLETED');
+		DECLARE v_Description CHARACTER COALESCE(FIELDVALUE(inputDataRef.description), '');
+		DECLARE v_TransactionId CHARACTER FIELDVALUE(inputDataRef.transactionId);
+		
+		CREATE FIELD OutputRoot.JSON.Data;
+		DECLARE outputDataRef REFERENCE TO OutputRoot.JSON.Data;
+		
+		-- 4. Validate mandatory and enum fields
+		IF v_AccountId IS NULL OR v_AccountId = '' THEN
+			SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 400;
+			SET outputDataRef.error = 'Validation Error';
+			SET outputDataRef.message = 'accountId is required';
+			RETURN TRUE;
+		END IF;
+		
+		IF v_Amount IS NULL THEN
+			SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 400;
+			SET outputDataRef.error = 'Validation Error';
+			SET outputDataRef.message = 'amount is required';
+			RETURN TRUE;
+		END IF;
+		
+		IF v_TransactionType IS NULL OR v_TransactionType = '' THEN
+			SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 400;
+			SET outputDataRef.error = 'Validation Error';
+			SET outputDataRef.message = 'transactionType is required';
+			RETURN TRUE;
+		END IF;
+		
+		IF v_TransactionType NOT IN ('DEPOSIT', 'WITHDRAWAL', 'TRANSFER', 'PAYMENT') THEN
+			SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 400;
+			SET outputDataRef.error = 'Validation Error';
+			SET outputDataRef.message = 'transactionType must be DEPOSIT, WITHDRAWAL, TRANSFER, or PAYMENT';
+			RETURN TRUE;
+		END IF;
+		
+		IF v_Status NOT IN ('PENDING', 'COMPLETED', 'FAILED', 'CANCELLED') THEN
+			SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 400;
+			SET OutputRoot.JSON.Data.error = 'Validation Error';
+			SET OutputRoot.JSON.Data.message = 'status must be PENDING, COMPLETED, FAILED, or CANCELLED';
+			RETURN TRUE;
+		END IF;
+			
+		-- 5. Generate TransactionId: TXN-YYMMDDHHMM
+		SET v_TransactionId = 'TXN-' || SUBSTRING(CAST(EXTRACT(YEAR  FROM CURRENT_TIMESTAMP) AS CHARACTER) FROM 3 FOR 2)
+		                           || RIGHT('0' || CAST(EXTRACT(MONTH  FROM CURRENT_TIMESTAMP) AS CHARACTER), 2)
+		                           || RIGHT('0' || CAST(EXTRACT(DAY    FROM CURRENT_TIMESTAMP) AS CHARACTER), 2)
+		                           || RIGHT('0' || CAST(EXTRACT(HOUR   FROM CURRENT_TIMESTAMP) AS CHARACTER), 2)
+		                           || RIGHT('0' || CAST(EXTRACT(MINUTE FROM CURRENT_TIMESTAMP) AS CHARACTER), 2);
+		
+		DECLARE DBSchema CHARACTER 'public';
+		DECLARE DBTable  CHARACTER 'transactions';
+		-- 6. Insert record into PostgreSQL database
+		INSERT INTO Database.{DBSchema}.{DBTable} (
+			transaction_id,
+			account_id,
+			amount,
+			currency,
+			transaction_type,
+			status,
+			description,
+			created_date,
+			updated_date
+		) VALUES (
+			v_TransactionId,
+			v_AccountId,
+			v_Amount,
+			v_Currency,
+			v_TransactionType,
+			v_Status,
+			v_Description,
+			CURRENT_TIMESTAMP,
+			CURRENT_TIMESTAMP
+		);
+		
+		-- 7. Construct 201 Created response
+		SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 201;
+		-- CREATE FIELD OutputRoot.JSON.Data;
+		-- DECLARE outputData REFERENCE TO OutputRoot.JSON.Data;
+		SET outputData.status = 'success';
+		SET outputData.message = 'Transaction ' || txId || ' created successfully.';
+		SET outputData.transactionDetails.transactionId = txId;
+		SET outputData.transactionDetails.accountId = accountId;
+		SET outputData.transactionDetails.amount = amountVal;
+		SET outputData.transactionDetails.currency = currencyVal;
+		SET outputData.transactionDetails.transactionType = txType;
+		SET outputData.transactionDetails.status = statusVal;
+		SET outputData.transactionDetails.description = descVal;
+		SET outputData.transactionDetails.createdDate = CURRENT_TIMESTAMP;
+		SET outputData.transactionDetails.updatedDate = CURRENT_TIMESTAMP;
+		
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+END MODULE;

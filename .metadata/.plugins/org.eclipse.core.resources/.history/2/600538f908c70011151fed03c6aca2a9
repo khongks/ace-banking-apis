@@ -1,0 +1,8 @@
+{
+  "AccountId": "ACC-10001",
+  "Amount": 500.00,
+  "Currency": "AUD",
+  "TransactionType": "DEPOSIT",
+  "Status": "COMPLETED",
+  "Status": "ACTIVE"
+}

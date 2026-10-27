@@ -1,0 +1,54 @@
+/*EATE FUNCTION Main() RETURNS BOOLE*/
+	BEGIN
+		-- 1. Copy headers to preserve HTTP transport context
+		CALL CopyMessageHeaders();
+		
+		-- 2. Extract optional query parameter filters
+		DECLARE customerIdFilter CHAR InputLocalEnvironment.REST.Input.Parameters.customerId;
+		DECLARE statusFilter CHAR InputLocalEnvironment.REST.Input.Parameters.status;
+		
+		-- 3. Reference Output JSON Array
+		CREATE FIELD OutputRoot.JSON.Data IDENTITY (JSON.Array)Data;
+		DECLARE outputDataRef REFERENCE TO OutputRoot.JSON.Data;
+						
+		DECLARE DBSchema CHARACTER 'public';
+		DECLARE DBTable  CHARACTER 'accounts';
+
+		IF customerIdFilter IS NOT NULL AND customerIdFilter <> '' AND statusFilter IS NOT NULL AND statusFilter <> '' THEN
+			SET outputDataRef.Item[] = SELECT 
+				A.account_id    AS accountId,
+				A.customer_id   AS customerId,
+				A.account_type  AS accountType,
+				A.balance       AS balance,
+				A.currency      AS currency,
+				A.status        AS status
+			FROM Database.{DBSchema}.{DBTable} AS A;
+		ELSEIF customerIdFilter IS NOT NULL AND customerIdFilter <> '' THEN
+		
+		ELSEIF statusFilter IS NOT NULL AND statusFilter <> '' THEN
+			
+		ELSE
+			
+		END IF;	
+		
+
+		
+		IF (SQLCODE = 0) THEN
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '200';
+			RETURN TRUE;
+		ELSE
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '500';			
+			SET outputDataRef.error   = 'SQL Error';
+            SET outputDataRef.message = 'Select operation failed. The database SQLSTATE was ' || CAST(SQLSTATE AS CHAR) || ' and the SQLCODE was ' || CAST(SQLCODE AS CHAR); 
+		END IF;
+		RETURN TRUE;
+	END;
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;

@@ -1,0 +1,102 @@
+/*EATE FUNCTION Main() RETURNS BOOLE*/
+	BEGIN
+		-- 1. Copy headers to preserve HTTP transport context
+		CALL CopyMessageHeaders();
+		
+		-- 2. Extract optional query parameter filters
+		DECLARE accountIdFilter CHAR InputLocalEnvironment.REST.Input.Parameters.accountId;
+		DECLARE statusFilter CHAR InputLocalEnvironment.REST.Input.Parameters.status;
+		
+		DECLARE DBSchema CHARACTER 'public';
+		DECLARE DBTable  CHARACTER 'transactions';
+		
+		CREATE FIELD OutputRoot.JSON.Data IDENTITY (JSON.Array)Data;
+		DECLARE outputDataRef REFERENCE TO OutputRoot.JSON.Data;
+
+		-- 3. Query PostgreSQL based on filters
+--		DECLARE transaction ROW;
+		IF accountIdFilter IS NOT NULL AND accountIdFilter <> '' AND statusFilter IS NOT NULL AND statusFilter <> '' THEN
+			SET outputDataRef.Item[] = SELECT
+				T.transactionId AS TransactionId,
+				T.accountId AS AccountId,
+				T.amount AS Amount,
+				T.currency AS Currency,
+				T.transaction_type AS TransactionType,
+				T.status AS Status,
+				T.description AS Description,
+				T.created_date AS CreatedDate,
+				T.updated_date AS UpdatedDate
+			FROM Database.{DBSchema}.{DBTable} AS T WHERE T.account_id = accountIdFilter AND T.status = statusFilter;
+		ELSEIF accountIdFilter IS NOT NULL AND accountIdFilter <> '' THEN
+			SET outputDataRef.Item[] = SELECT
+				T.transactionId AS TransactionId,
+				T.accountId AS AccountId,
+				T.amount AS Amount,
+				T.currency AS Currency,
+				T.transaction_type AS TransactionType,
+				T.status AS Status,
+				T.description AS Description,
+				T.created_date AS CreatedDate,
+				T.updated_date AS UpdatedDate 
+			FROM Database.{DBSchema}.{DBTable} AS T WHERE T.account_id = accountIdFilter;
+		ELSEIF statusFilter IS NOT NULL AND statusFilter <> '' THEN
+			SET outputDataRef.Item[] = SELECT
+				T.transactionId AS TransactionId,
+				T.accountId AS AccountId,
+				T.amount AS Amount,
+				T.currency AS Currency,
+				T.transaction_type AS TransactionType,
+				T.status AS Status,
+				T.description AS Description,
+				T.created_date AS CreatedDate,
+				T.updated_date AS UpdatedDate
+			FROM Database.{DBSchema}.{DBTable} AS T WHERE T.status = statusFilter;
+		ELSE
+			SET outputDataRef.Item[] = SELECT
+				T.transactionId AS TransactionId,
+				T.accountId AS AccountId,
+				T.amount AS Amount,
+				T.currency AS Currency,
+				T.transaction_type AS TransactionType,
+				T.status AS Status,
+				T.description AS Description,
+				T.created_date AS CreatedDate,
+				T.updated_date AS UpdatedDate
+			FROM Database.{DBSchema}.{DBTable} AS T;
+		END IF;
+		
+		-- 4. Initialize HTTP response status and explicit JSON Array structure
+--		SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 200;
+--		CREATE FIELD OutputRoot.JSON.Data IDENTITY (JSON.Array)Data;
+--		DECLARE outputDataRef REFERENCE TO OutputRoot.JSON.Data;
+		
+		-- 5. Safe traversal loop using REFERENCE and NEXTSIBLING NAME
+--		DECLARE outIndex INT 1;
+--		DECLARE refTransaction REFERENCE TO transaction.Transaction[1];
+--		WHILE LASTMOVE(refTransaction) DO
+--			SET outputDataRef.Item[outIndex].transactionId = COALESCE(refTransaction.transaction_id, refTransaction.TRANSACTION_ID);
+--			SET outputDataRef.Item[outIndex].accountId = COALESCE(refTransaction.account_id, refTransaction.ACCOUNT_ID);
+--			SET outputDataRef.Item[outIndex].amount = COALESCE(refTransaction.amount, refTransaction.AMOUNT);
+--			SET outputDataRef.Item[outIndex].currency = COALESCE(refTransaction.currency, refTransaction.CURRENCY);
+--			SET outputDataRef.Item[outIndex].transactionType = COALESCE(refTransaction.transaction_type, refTransaction.TRANSACTION_TYPE);
+--			SET outputDataRef.Item[outIndex].status = COALESCE(refTransaction.status, refTransaction.STATUS);
+--			SET outputDataRef.Item[outIndex].description = COALESCE(refTransaction.description, refTransaction.DESCRIPTION);
+--			SET outputDataRef.Item[outIndex].createdDate = COALESCE(refTransaction.created_date, refTransaction.CREATED_DATE);
+--			SET outputDataRef.Item[outIndex].updatedDate = COALESCE(refTransaction.updated_date, refTransaction.UPDATED_DATE);
+--			
+--			SET outIndex = outIndex + 1;
+--			MOVE refTransaction NEXTSIBLING NAME 'Transaction';
+--		END WHILE;
+		
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;

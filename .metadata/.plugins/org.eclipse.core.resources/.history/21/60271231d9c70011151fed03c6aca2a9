@@ -1,0 +1,328 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Accounts",
+    "description": "This is a REST API for do CRUDL on Accounts.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "/v1/accounts"
+    }
+  ],
+  "paths": {
+    "/": {
+      "post": {
+        "summary": "Create a new account",
+        "operationId": "createAccount",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Account created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List all accounts",
+        "operationId": "listAccounts",
+        "responses": {
+          "200": {
+            "description": "List of accounts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Account"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{accountId}": {
+      "get": {
+        "summary": "Retrieve account details by ID",
+        "operationId": "getAccount",
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Account not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update existing account details",
+        "operationId": "updateAccount",
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountUpdateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Account updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Account not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete an account by ID",
+        "operationId": "deleteAccount",
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Account not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Account": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "description": "Unique identifier for the account"
+          },
+          "customerId": {
+            "type": "string",
+            "description": "Id of the account holder"
+          },
+          "accountType": {
+            "type": "string",
+            "description": "Type of account",
+            "enum": [
+              "SAVINGS",
+              "CHECKING",
+              "CREDIT"
+            ]
+          },
+          "balance": {
+            "type": "number",
+            "description": "Current account balance"
+          },
+          "currency": {
+            "type": "string",
+            "description": "Currency code, e.g. USD"
+          },
+          "status": {
+            "type": "string",
+            "description": "Account status",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ]
+          }
+        }
+      },
+      "AccountInput": {
+        "type": "object",
+        "required": [
+          "CustomerName",
+          "AccountType",
+          "Currency",
+          "Status"
+        ],
+        "properties": {
+          "CustomerName": {
+            "type": "string",
+            "description": "Name of the account holder"
+          },
+          "AccountType": {
+            "type": "string",
+            "description": "Type of account",
+            "enum": [
+              "SAVINGS",
+              "CHECKING",
+              "CREDIT"
+            ]
+          },
+          "Balance": {
+            "type": "number",
+            "description": "Initial account balance"
+          },
+          "Currency": {
+            "type": "string",
+            "description": "Currency code, e.g. USD"
+          },
+          "Status": {
+            "type": "string",
+            "description": "Account status",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ]
+          }
+        }
+      },
+      "AccountUpdateInput": {
+        "type": "object",
+        "properties": {
+          "CustomerId": {
+            "type": "string",
+            "description": "Id of the account holder"
+          },
+          "AccountType": {
+            "type": "string",
+            "description": "Type of account",
+            "enum": [
+              "SAVINGS",
+              "CHECKING",
+              "CREDIT"
+            ]
+          },
+          "Balance": {
+            "type": "number",
+            "description": "Initial account balance"
+          },
+          "Currency": {
+            "type": "string",
+            "description": "Currency code, e.g. USD"
+          },
+          "Status": {
+            "type": "string",
+            "description": "Account status",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ]
+          }
+        }
+      },
+      "MessageResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "x-ibm-configuration": {}
+}

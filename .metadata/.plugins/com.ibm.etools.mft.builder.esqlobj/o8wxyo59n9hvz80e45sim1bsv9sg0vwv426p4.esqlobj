@@ -1,0 +1,49 @@
+/*EATE FUNCTION Main() RETURNS BOOLE*/
+	BEGIN
+		-- 1. Copy headers to preserve HTTP transport context downstream
+		CALL CopyMessageHeaders();
+		-- Extract request body fields
+		DECLARE inputDataRef REFERENCE TO InputRoot.JSON.Data;
+		DECLARE v_CustomerName CHARACTER CAST(inputDataRef.customerName AS CHARACTER);
+		DECLARE v_AccountType  CHARACTER CAST(inputDataRef.accountType  AS CHARACTER);
+		DECLARE v_Balance      DECIMAL CAST(inputDataRef.balance      	AS DECIMAL);
+		DECLARE v_Currency     CHARACTER CAST(inputDataRef.currency     AS CHARACTER);
+		DECLARE v_Status       CHARACTER CAST(inputDataRef.status       AS CHARACTER);
+		DECLARE v_AccountId    CHARACTER;
+
+		-- Generates ACC-YYMMDDHHMM (e.g., ACC-2610112343)
+		SET v_AccountId = 'ACC-' || SUBSTRING(CAST(EXTRACT(YEAR FROM CURRENT_TIMESTAMP) AS CHARACTER) FROM 3 FOR 2)
+          		                 || RIGHT('0' || CAST(EXTRACT(MONTH FROM CURRENT_TIMESTAMP) AS CHARACTER), 2)
+          		               	 || RIGHT('0' || CAST(EXTRACT(DAY FROM CURRENT_TIMESTAMP) AS CHARACTER), 2)
+          		                 || RIGHT('0' || CAST(EXTRACT(HOUR FROM CURRENT_TIMESTAMP) AS CHARACTER), 2)
+                		         || RIGHT('0' || CAST(EXTRACT(MINUTE FROM CURRENT_TIMESTAMP) AS CHARACTER), 2);
+		
+		DECLARE DBSchema CHARACTER 'public';	
+		DECLARE DBTable  CHARACTER 'accounts';
+		-- Insert new account into PostgreSQL via ODBC datasource MY_PG_DSN
+		INSERT INTO Database.{DBSchema}.{DBTable}
+			(account_id, customer_name, account_type, balance, currency, status) 
+		VALUES 
+			(v_AccountId, v_CustomerName, v_AccountType, v_Balance, v_Currency, v_Status);
+
+		SET OutputRoot.Properties = InputRoot.Properties;		
+		CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+		CREATE FIELD OutputRoot.JSON.Data;
+
+		IF (SQLCODE = 0) THEN
+			-- Build JSON response with 201 status
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '201';
+	        SET OutputRoot.JSON.Data.Result = 'A row was inserted into the database successfully.';
+			SET OutputRoot.JSON.Data.Account.AccountId    = v_AccountId;
+			SET OutputRoot.JSON.Data.Account.CustomerName = v_CustomerName;
+			SET OutputRoot.JSON.Data.Account.AccountType  = v_AccountType;
+			SET OutputRoot.JSON.Data.Account.Balance      = v_Balance;
+			SET OutputRoot.JSON.Data.Account.Currency     = v_Currency;
+			SET OutputRoot.JSON.Data.Account.Status       = v_Status;			
+		ELSE
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '500';			
+			SET OutputRoot.JSON.Data.error   = 'SQL Error';
+            SET OutputRoot.JSON.Data.message = 'Insert operation failed. The database SQLSTATE was ' || CAST(SQLSTATE AS CHAR) || ' and the SQLCODE was ' || CAST(SQLCODE AS CHAR); 
+		END IF;
+		RETURN TRUE;
+	END;

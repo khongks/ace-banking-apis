@@ -1,0 +1,33 @@
+/*EATE FUNCTION Main() RETURNS BOOLE*/
+	BEGIN
+		-- Build JSON array response
+		SET OutputRoot.Properties = InputRoot.Properties;
+		CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+		CREATE FIELD OutputRoot.JSON.Data IDENTITY (JSON.Array)Data;
+		
+		-- Explicitly declare 'accounts' as a JSON Array type
+		-- CREATE FIELD OutputRoot.JSON.Data.accounts IDENTITY(JSON.Array)accounts;
+		
+		DECLARE DBSchema CHARACTER 'public';
+		DECLARE DBTable  CHARACTER 'accounts';
+		
+		-- SET OutputRoot.JSON.Data.accounts.Item[] = SELECT * FROM Database.{DBSchema}.{DBTable} AS A;
+		SET OutputRoot.JSON.Data.Item[] = SELECT 
+			A.account_id    AS AccountId,
+			A.customer_name AS CustomerName,
+			A.account_type  AS AccountType,
+			A.balance       AS Balance,
+			A.currency      AS Currency,
+			A.status        AS Status
+		FROM Database.{DBSchema}.{DBTable} AS A;
+		
+		IF (SQLCODE = 0) THEN
+			-- SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '200';
+			RETURN TRUE;
+		ELSE
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '500';			
+			SET OutputRoot.JSON.Data.error   = 'SQL Error';
+            SET OutputRoot.JSON.Data.message = 'Select operation failed. The database SQLSTATE was ' || CAST(SQLSTATE AS CHAR) || ' and the SQLCODE was ' || CAST(SQLCODE AS CHAR); 
+		END IF;
+		RETURN TRUE;
+	END;

@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IntegrationNodeConnectionParameters Version="13.0.0" host="acevm.dev.fyre.ibm.com" integrationNodeName="INODE01" listenerPort="4414" sslIncludeProtocols="SSL_TLSv2" sslTrustStorePath="/Users/kskhong/.iib/iibTrustStore.jks" useSsl="true" xmlns="http://www.ibm.com/xmlns/prod/ace/13"/>

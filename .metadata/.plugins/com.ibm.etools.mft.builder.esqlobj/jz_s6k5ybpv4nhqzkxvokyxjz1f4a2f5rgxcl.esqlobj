@@ -1,0 +1,127 @@
+CREATE COMPUTE MODULE updateTransaction_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- 1. Copy headers to preserve HTTP transport context
+		CALL CopyMessageHeaders();
+		
+		-- 2. Extract path parameter
+		DECLARE v_TransactionId CHAR InputLocalEnvironment.REST.Input.Parameters.transactionId;
+		
+		-- 3. Reference Input JSON Data
+		DECLARE inputDataRef REFERENCE TO InputRoot.JSON.Data;
+
+		-- 4. Reference Output JSON Data
+		CREATE FIELD OutputRoot.JSON.Data;
+		DECLARE outputDataRef REFERENCE TO OutputRoot.JSON.Data;
+		
+		-- 5. Check JSON Data Exist
+		IF NOT LASTMOVE(inputDataRef) THEN
+			SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 400;
+			SET outputDataRef.error = 'Bad Request';
+			SET outputDataRef.message = 'No JSON data found in input message.';
+			RETURN TRUE;
+		END IF;
+
+		DECLARE DBSchema CHARACTER 'public';
+		DECLARE DBTable  CHARACTER 'transactions';
+
+		-- 3. Check if target transaction exists in PostgreSQL
+		DECLARE transaction ROW;
+		SET transaction.Record[] = SELECT
+			T.transaction_id 	AS transaction_id,
+			T.account_id        AS account_id,
+			T.currency          AS currency,
+			T.transaction_type  AS transaction_type,
+			T.status            AS status,
+			T.description       AS description
+		FROM Database.{DBSchema}.{DBTable} AS T
+		WHERE T.transaction_id = v_TransactionId;
+		
+		IF (SQLCODE = 0) THEN
+			IF CARDINALITY(transaction.Record[]) > 0 THEN
+				-- CONTINUE;
+			ELSE
+				-- Failure: Record not found (HTTP 404)
+				SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 404;
+				SET outputDataRef.error = 'Transaction not found';
+				SET outputDataRef.message = 'The transactionId ' || v_TransactionId || ' does not exist.';
+				RETURN TRUE;
+			END IF;
+		ELSE
+			RETURN TRUE;
+		END IF;
+
+		-- 3. Extract and map input data fields using FIELDVALUE
+		DECLARE v_AccountId CHARACTER FIELDVALUE(inputDataRef.AccountId);
+		DECLARE v_Amount DECIMAL FIELDVALUE(inputDataRef.Amount);
+		DECLARE v_TransactionType CHARACTER FIELDVALUE(inputDataRef.TransactionType);
+		DECLARE v_Currency CHARACTER FIELDVALUE(inputDataRef.Currency);
+		DECLARE v_Status CHARACTER FIELDVALUE(inputDataRef.Status);
+		DECLARE v_Description CHARACTER FIELDVALUE(inputDataRef.Description);
+		
+		-- 4. Validate transactionType if provided
+		IF v_TransactionType IS NOT NULL AND v_TransactionType NOT IN ('DEPOSIT', 'WITHDRAWAL', 'TRANSFER', 'PAYMENT') THEN
+			SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 400;
+			SET outputDataRef.error = 'Validation Error';
+			SET outputDataRef.message = 'TransactionType must be DEPOSIT, WITHDRAWAL, TRANSFER, or PAYMENT';
+			RETURN TRUE;
+		END IF;
+		
+		-- 5. Validate status if provided
+		IF v_Status IS NOT NULL AND v_Status NOT IN ('PENDING', 'COMPLETED', 'FAILED', 'CANCELLED') THEN
+			SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 400;
+			SET outputDataRef.error = 'Validation Error';
+			SET outputDataRef.details = 'status must be PENDING, COMPLETED, FAILED, or CANCELLED';
+			RETURN TRUE;
+		END IF;
+		
+		-- 6. Merge values: update specified fields, retain existing for omitted fields
+		DECLARE finalAccountId CHARACTER COALESCE(v_AccountId, transaction.account_id);
+		DECLARE finalAmount DECIMAL COALESCE(v_Amount, transaction.amount);
+		DECLARE finalCurrency CHARACTER COALESCE(v_Currency, transaction.currency);
+		DECLARE finalTransactionType CHARACTER COALESCE(v_TransactionType, transaction.transaction_type);
+		DECLARE finalStatus CHARACTER COALESCE(v_Status, transaction.status);
+		DECLARE finalDescription CHARACTER COALESCE(v_Description, transaction.description);
+		
+		-- 7. Perform database update in PostgreSQL
+		UPDATE Database.{DBSchema}.{DBTable} AS T
+		SET account_id = finalAccountId,
+		    amount = finalAmount,
+		    currency = finalCurrency,
+		    transaction_type = finalTransactionType,
+		    status = finalStatus,
+		    description = finalDescription,
+		    updated_date = CURRENT_TIMESTAMP
+		WHERE T.transaction_id = v_TransactionId;
+		
+		IF (SQLCODE = 0) THEN
+			-- 8. Construct 200 OK response
+			SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 200;
+			SET outputDataRef.status = 'success';
+			SET outputDataRef.message = 'Transaction ' || v_TransactionId || ' updated successfully.';
+			SET outputDataRef.Transaction.transactionId = v_TransactionId;
+			SET outputDataRef.Transaction.accountId = finalAccountId;
+			SET outputDataRef.Transaction.amount = finalAmount;
+			SET outputDataRef.Transaction.currency = finalCurrency;
+			SET outputDataRef.Transaction.transactionType = finalTransactionType;
+			SET outputDataRef.Transaction.status = finalStatus;
+			SET outputDataRef.Transaction.description = finalDescription;
+			SET outputDataRef.Transaction.updatedDate = CURRENT_TIMESTAMP;
+		ELSE
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '500';
+			SET outputDataRef.error   = 'SQL Error';
+			SET outputDataRef.message = 'Update operation failed. The database SQLSTATE was ' || CAST(SQLSTATE AS CHAR) || ' and the SQLCODE was ' || CAST(SQLCODE AS CHAR);
+		END IF;
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+END MODULE;

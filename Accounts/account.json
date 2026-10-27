@@ -1,0 +1,7 @@
+{
+  "customerId": "CUS-000000000010",
+  "accountType": "SAVINGS",
+  "balance": 5200.50,
+  "currency": "USD",
+  "status": "ACTIVE"
+}

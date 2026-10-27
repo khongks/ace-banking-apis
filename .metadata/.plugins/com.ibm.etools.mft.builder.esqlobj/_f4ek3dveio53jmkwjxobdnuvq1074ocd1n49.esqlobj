@@ -1,0 +1,86 @@
+CREATE COMPUTE MODULE listTransactions_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- 1. Copy headers to preserve HTTP transport context
+		CALL CopyMessageHeaders();
+		
+		-- 2. Extract optional query parameter filters
+		DECLARE accountIdFilter CHAR InputLocalEnvironment.REST.Input.Parameters.accountId;
+		DECLARE statusFilter CHAR InputLocalEnvironment.REST.Input.Parameters.status;
+				
+		-- 3. Reference Output JSON Array
+		CREATE FIELD OutputRoot.JSON.Data IDENTITY (JSON.Array)Data;
+		DECLARE outputDataRef REFERENCE TO OutputRoot.JSON.Data;
+		
+		-- 4. Query PostgreSQL based on filters
+		DECLARE DBSchema CHARACTER 'public';
+		DECLARE DBTable  CHARACTER 'transactions';
+		IF accountIdFilter IS NOT NULL AND accountIdFilter <> '' AND statusFilter IS NOT NULL AND statusFilter <> '' THEN
+			SET outputDataRef.Item[] = SELECT
+				T.transaction_id AS transactionId,
+				T.account_id AS accountId,
+				T.amount AS amount,
+				T.currency AS currency,
+				T.transaction_type AS transactionType,
+				T.status AS status,
+				T.description AS description,
+				T.created_date AS createdDate,
+				T.updated_date AS updatedDate
+			FROM Database.{DBSchema}.{DBTable} AS T WHERE T.account_id = accountIdFilter AND T.status = statusFilter;
+		ELSEIF accountIdFilter IS NOT NULL AND accountIdFilter <> '' THEN
+			SET outputDataRef.Item[] = SELECT
+				T.transaction_id AS transactionId,
+				T.account_id AS accountId,
+				T.amount AS amount,
+				T.currency AS currency,
+				T.transaction_type AS transactionType,
+				T.status AS status,
+				T.description AS description,
+				T.created_date AS createdDate,
+				T.updated_date AS updatedDate
+			FROM Database.{DBSchema}.{DBTable} AS T WHERE T.account_id = accountIdFilter;
+		ELSEIF statusFilter IS NOT NULL AND statusFilter <> '' THEN
+			SET outputDataRef.Item[] = SELECT
+				T.transaction_id AS transactionId,
+				T.account_id AS accountId,
+				T.amount AS amount,
+				T.currency AS currency,
+				T.transaction_type AS transactionType,
+				T.status AS status,
+				T.description AS description,
+				T.created_date AS createdDate,
+				T.updated_date AS updatedDate
+			FROM Database.{DBSchema}.{DBTable} AS T WHERE T.status = statusFilter;
+		ELSE
+			SET outputDataRef.Item[] = SELECT
+				T.transaction_id AS transactionId,
+				T.account_id AS accountId,
+				T.amount AS amount,
+				T.currency AS currency,
+				T.transaction_type AS transactionType,
+				T.status AS status,
+				T.description AS description,
+				T.created_date AS createdDate,
+				T.updated_date AS updatedDate
+			FROM Database.{DBSchema}.{DBTable} AS T;
+		END IF;
+		IF (SQLCODE = 0) THEN
+			-- CONTINUE
+		ELSE
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '500';
+			SET outputDataRef.error   = 'SQL Error';
+			SET outputDataRef.message = 'Select operation failed. The database SQLSTATE was ' || CAST(SQLSTATE AS CHAR) || ' and the SQLCODE was ' || CAST(SQLCODE AS CHAR);
+		END IF;	
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+END MODULE;

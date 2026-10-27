@@ -1,0 +1,88 @@
+-- =============================================================================
+-- PostgreSQL Database Schema for Accounts REST API
+-- Project: Accounts
+-- IBM App Connect Enterprise (ACE) / ESQL Integration
+--
+-- To execute an external .sql file directly from the command line using psql, use the -f (or --file) flag:
+-- psql -h hostname -U username -d dbname -f
+-- =============================================================================
+
+-- 1. Create table public.accounts
+CREATE TABLE IF NOT EXISTS public.accounts (
+    account_id       VARCHAR(64)    NOT NULL,
+    customer_id      VARCHAR(64)    NOT NULL,
+    account_type     VARCHAR(20)    NOT NULL,
+    balance          NUMERIC(20, 2) NOT NULL,
+    currency         VARCHAR(3)     NOT NULL,
+    status           VARCHAR(20)    NOT NULL,
+    CONSTRAINT pk_accounts PRIMARY KEY (account_id)
+);
+
+-- 2. Indexes for query optimization
+CREATE INDEX IF NOT EXISTS idx_accounts_customer_id 
+    ON public.accounts(account_id);
+
+CREATE INDEX IF NOT EXISTS idx_accounts_status 
+    ON public.accounts(status);
+
+-- 3. Optional sample test records
+INSERT INTO public.accounts (account_id, customer_id, account_type, balance, currency, status) VALUES
+-- Customer 1 (2 accounts)
+('ACC-000000000001', 'CUS-000000000001', 'SAVINGS', 5420.50, 'AUD', 'ACTIVE'),
+('ACC-000000000002', 'CUS-000000000001', 'CHECK', 1250.00, 'AUD', 'ACTIVE'),
+-- Customer 2 (2 accounts)
+('ACC-000000000003', 'CUS-000000000002', 'SAVINGS', 12300.75, 'USD', 'ACTIVE'),
+('ACC-000000000004', 'CUS-000000000002', 'CREDIT', -450.20, 'USD', 'ACTIVE'),
+-- Customer 3 (1 account)
+('ACC-000000000005', 'CUS-000000000003', 'CHECK', 3100.00, 'AUD', 'ACTIVE'),
+-- Customer 4 (3 accounts)
+('ACC-000000000006', 'CUS-000000000004', 'SAVINGS', 8900.10, 'AUD', 'ACTIVE'),
+('ACC-000000000007', 'CUS-000000000004', 'CHECK', 640.80, 'AUD', 'ACTIVE'),
+('ACC-000000000008', 'CUS-000000000004', 'CREDIT', -1200.00, 'AUD', 'ACTIVE'),
+-- Customer 5 (1 account)
+('ACC-000000000009', 'CUS-000000000005', 'SAVINGS', 450.00, 'AUD', 'INACTIVE'),
+-- Customer 6 (2 accounts)
+('ACC-000000000010', 'CUS-000000000006', 'SAVINGS', 15400.00, 'USD', 'ACTIVE'),
+('ACC-000000000011', 'CUS-000000000006', 'CHECK', 2300.45, 'USD', 'ACTIVE'),
+-- Customer 7 (2 accounts)
+('ACC-000000000012', 'CUS-000000000007', 'CREDIT', -89.50, 'AUD', 'ACTIVE'),
+('ACC-000000000013', 'CUS-000000000007', 'SAVINGS', 9210.00, 'AUD', 'ACTIVE'),
+-- Customer 8 (1 account)
+('ACC-000000000014', 'CUS-000000000008', 'SAVINGS', 3450.25, 'AUD', 'ACTIVE'),
+-- Customer 9 (2 accounts)
+('ACC-000000000015', 'CUS-000000000009', 'CHECK', 120.00, 'AUD', 'INACTIVE'),
+('ACC-000000000016', 'CUS-000000000009', 'CREDIT', 0.00, 'AUD', 'INACTIVE'),
+-- Customer 10 (2 accounts)
+('ACC-000000000017', 'CUS-000000000010', 'SAVINGS', 7890.30, 'USD', 'ACTIVE'),
+('ACC-000000000018', 'CUS-000000000010', 'CHECK', 450.00, 'USD', 'ACTIVE');
+
+-- =============================================================================
+-- IBM App Connect Enterprise ODBC Setup Guide for PostgreSQL
+-- =============================================================================
+--
+-- 1. odbc.ini configuration (e.g. /var/mqsi/odbc/odbc.ini or $ODBCINI):
+--
+--    [ODBC Data Sources]
+--    MY_PG_DSN=PostgreSQL Wire Protocol
+--
+--    [MY_PG_DSN]
+--    Driver=/opt/ibm/ace-13.0.9.0/server/ODBC/drivers/lib/UKsqls95.so  (or DataDirect / psqlODBC driver)
+--    Description=IBM App Connect Enterprise PostgreSQL Wire Protocol
+--    Database=banking_db
+--    HostName=localhost
+--    PortNumber=5432
+--    LogonID=postgres
+--    Password=secret
+--
+-- 2. Configure credentials in ACE Integration Node / Server using mqsisetdbparms:
+--
+--    mqsisetdbparms <IntegrationNodeName> -n odbc::MY_PG_DSN -u <dbuser> -p <dbpassword>
+--
+--    For independent integration server:
+--    mqsisetdbparms --work-dir <work-dir> -n odbc::MY_PG_DSN -u <dbuser> -p <dbpassword>
+--
+-- 3. Verify connection:
+--
+--    mqsicvp <IntegrationNodeName> -n MY_PG_DSN
+--
+-- =============================================================================

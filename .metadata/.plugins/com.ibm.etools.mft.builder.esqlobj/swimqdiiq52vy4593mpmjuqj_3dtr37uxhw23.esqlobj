@@ -1,0 +1,56 @@
+/*EATE FUNCTION Main() RETURNS BOOLE*/
+    BEGIN
+        SET OutputRoot.Properties = InputRoot.Properties;
+
+        -- Extract Optional Query Parameters
+        DECLARE filterStatus   CHARACTER InputLocalEnvironment.REST.Input.Parameters.status;
+        DECLARE filterAccType  CHARACTER InputLocalEnvironment.REST.Input.Parameters.accountType;
+
+        -- Query PostgreSQL with dynamic filtering
+        DECLARE dbResult ROW;
+        
+        IF filterStatus IS NOT NULL AND filterAccType IS NOT NULL THEN
+            SET dbResult.Accounts[] = PASSTHRU('SELECT account_id, customer_name, account_type, balance, currency, status FROM accounts WHERE status = ? AND account_type = ? ORDER BY account_id'
+                TO Database.{MY_PG_DSN}
+                VALUES(filterStatus, filterAccType));
+        ELSEIF filterStatus IS NOT NULL THEN
+            SET dbResult.Accounts[] = PASSTHRU('SELECT account_id, customer_name, account_type, balance, currency, status FROM accounts WHERE status = ? ORDER BY account_id'
+                TO Database.{MY_PG_DSN}
+                VALUES(filterStatus));
+        ELSEIF filterAccType IS NOT NULL THEN
+            SET dbResult.Accounts[] = PASSTHRU('SELECT account_id, customer_name, account_type, balance, currency, status FROM accounts WHERE account_type = ? ORDER BY account_id'
+                TO Database.{MY_PG_DSN}
+                VALUES(filterAccType));
+        ELSE
+            SET dbResult.Accounts[] = PASSTHRU('SELECT account_id, customer_name, account_type, balance, currency, status FROM accounts ORDER BY account_id'
+                TO Database.{MY_PG_DSN});
+        END IF;
+
+        -- Set HTTP 200 OK
+        SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 200;
+
+        -- Initialize JSON Array
+        CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+        CREATE FIELD OutputRoot.JSON.Data IDENTITY (JSON.Array)Data;
+        DECLARE outArray REFERENCE TO OutputRoot.JSON.Data;
+
+        -- Iterate and map database rows to JSON items
+        DECLARE accCount INTEGER CARDINALITY(dbResult.Accounts[]);
+        DECLARE idx INTEGER 1;
+
+        WHILE idx <= accCount DO
+            CREATE LASTCHILD OF outArray TYPE JSON.Object;
+            DECLARE currentAcc REFERENCE TO dbResult.Accounts[idx];
+            
+            SET outArray.Item[idx].AccountId    = currentAcc.account_id;
+            SET outArray.Item[idx].CustomerName  = currentAcc.customer_name;
+            SET outArray.Item[idx].AccountType   = currentAcc.account_type;
+            SET outArray.Item[idx].Balance       = CAST(currentAcc.balance AS DECIMAL);
+            SET outArray.Item[idx].Currency      = currentAcc.currency;
+            SET outArray.Item[idx].Status        = currentAcc.status;
+
+            SET idx = idx + 1;
+        END WHILE;
+
+        RETURN TRUE;
+    END;

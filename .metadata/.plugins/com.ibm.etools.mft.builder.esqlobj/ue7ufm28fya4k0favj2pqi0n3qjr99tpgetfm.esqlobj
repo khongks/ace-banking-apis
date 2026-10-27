@@ -1,0 +1,64 @@
+/*EATE FUNCTION Main() RETURNS BOOLE*/
+	BEGIN
+		-- Retrieve accountId from the HTTP path parameter
+		DECLARE v_AccountId CHARACTER InputLocalEnvironment.REST.Input.Parameters.accountId;
+
+		-- Extract request body fields
+		DECLARE reqRef REFERENCE TO InputRoot.JSON.Data;
+
+		DECLARE v_CustomerName CHARACTER;
+		DECLARE v_AccountType  CHARACTER;
+		DECLARE v_Balance      DECIMAL;
+		DECLARE v_Currency     CHARACTER;
+		DECLARE v_Status       CHARACTER;
+		DECLARE v_Found        BOOLEAN FALSE;
+		DECLARE account 	  	ROW;
+
+		SET v_CustomerName = CAST(reqRef.CustomerName AS CHARACTER);
+		SET v_AccountType  = CAST(reqRef.AccountType  AS CHARACTER);
+		SET v_Balance      = CAST(reqRef.Balance      AS DECIMAL);
+		SET v_Currency     = CAST(reqRef.Currency     AS CHARACTER);
+		SET v_Status       = CAST(reqRef.Status       AS CHARACTER);
+		
+		DECLARE DBTable  CHARACTER 'public.accounts';
+		-- Check account exists
+		SET account = (SELECT P FROM Database.{DBTable} AS P WHERE P.account_id = v_AccountId);
+		IF account.account_id IS NOT NULL THEN
+			SET v_Found = TRUE;
+		ELSE
+			SET v_Found = FALSE;
+		END IF;
+
+		IF v_Found = FALSE THEN
+			SET OutputRoot.Properties = InputRoot.Properties;
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '404';
+			CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+			CREATE FIELD OutputRoot.JSON.Data;
+			SET OutputRoot.JSON.Data.error   = 'NOT_FOUND';
+			SET OutputRoot.JSON.Data.message = 'Account ' || v_AccountId || ' not found';
+			RETURN TRUE;
+		END IF;
+
+		-- Update account in PostgreSQL via ODBC datasource MY_PG_DSN
+		UPDATE Database.{DBTable} AS P
+			SET customer_name = v_CustomerName,
+			    account_type  = v_AccountType,
+			    balance       = v_Balance,
+			    currency      = v_Currency,
+			    status        = v_Status
+			WHERE P.account_id = v_AccountId;
+
+		-- Build JSON response
+		SET OutputRoot.Properties = InputRoot.Properties;
+		CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+		CREATE FIELD OutputRoot.JSON.Data;
+
+		SET OutputRoot.JSON.Data.AccountId    = v_AccountId;
+		SET OutputRoot.JSON.Data.CustomerName = v_CustomerName;
+		SET OutputRoot.JSON.Data.AccountType  = v_AccountType;
+		SET OutputRoot.JSON.Data.Balance      = v_Balance;
+		SET OutputRoot.JSON.Data.Currency     = v_Currency;
+		SET OutputRoot.JSON.Data.Status       = v_Status;
+
+		RETURN TRUE;
+	END;

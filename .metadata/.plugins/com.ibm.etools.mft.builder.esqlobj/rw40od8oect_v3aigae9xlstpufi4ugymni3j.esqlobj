@@ -1,0 +1,58 @@
+CREATE COMPUTE MODULE createAccount_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- Extract request body fields
+		DECLARE reqRef REFERENCE TO InputRoot.JSON.Data;
+
+		DECLARE v_CustomerName CHARACTER;
+		DECLARE v_AccountType  CHARACTER;
+		DECLARE v_Balance      DECIMAL;
+		DECLARE v_Currency     CHARACTER;
+		DECLARE v_Status       CHARACTER;
+		DECLARE v_AccountId    CHARACTER;
+
+		SET v_CustomerName = CAST(reqRef.CustomerName AS CHARACTER);
+		SET v_AccountType  = CAST(reqRef.AccountType  AS CHARACTER);
+		SET v_Balance      = CAST(reqRef.Balance      AS DECIMAL);
+		SET v_Currency     = CAST(reqRef.Currency     AS CHARACTER);
+		SET v_Status       = CAST(reqRef.Status       AS CHARACTER);
+
+		-- Generate a new AccountId using current timestamp + random component
+		SET v_AccountId = 'ACC-' || CAST(EXTRACT(YEAR  FROM CURRENT_TIMESTAMP) AS CHARACTER)
+		                          || CAST(EXTRACT(MONTH FROM CURRENT_TIMESTAMP) AS CHARACTER)
+		                          || CAST(EXTRACT(DAY   FROM CURRENT_TIMESTAMP) AS CHARACTER)
+		                          || CAST(EXTRACT(HOUR  FROM CURRENT_TIMESTAMP) AS CHARACTER)
+		                          || CAST(EXTRACT(MINUTE FROM CURRENT_TIMESTAMP) AS CHARACTER)
+		                          || CAST(EXTRACT(SECOND FROM CURRENT_TIMESTAMP) AS CHARACTER);
+
+		-- Insert new account into PostgreSQL via ODBC datasource MY_PG_DSN
+		DECLARE sqlStatement CHARACTER
+			'INSERT INTO accounts (account_id, customer_name, account_type, balance, currency, status) '
+			|| 'VALUES (?, ?, ?, ?, ?, ?)';
+
+		PASSTHRU(sqlStatement,
+			v_AccountId,
+			v_CustomerName,
+			v_AccountType,
+			v_Balance,
+			v_Currency,
+			v_Status
+		) TO Database.{MY_PG_DSN};
+
+		-- Build JSON response with 201 status
+		SET OutputRoot.Properties         = InputRoot.Properties;
+		SET OutputRoot.HTTPResponseHeader.X-Original-HTTP-Status-Code = '201';
+
+		CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+		CREATE FIELD OutputRoot.JSON.Data;
+
+		SET OutputRoot.JSON.Data.AccountId    = v_AccountId;
+		SET OutputRoot.JSON.Data.CustomerName = v_CustomerName;
+		SET OutputRoot.JSON.Data.AccountType  = v_AccountType;
+		SET OutputRoot.JSON.Data.Balance      = v_Balance;
+		SET OutputRoot.JSON.Data.Currency     = v_Currency;
+		SET OutputRoot.JSON.Data.Status       = v_Status;
+
+		RETURN TRUE;
+	END;
+END MODULE;

@@ -1,0 +1,220 @@
+# Customers REST API (IBM App Connect Enterprise)
+
+A complete REST API service for banking customers built for **IBM App Connect Enterprise (ACE)** using **ESQL** and backed by **PostgreSQL** for persistence.
+
+---
+
+## 📌 Overview
+
+This project implements the complete lifecycle for financial customers:
+- **Create**: Add a new customer (with customer ID, firstName, phone, email, dateOfBirth, status, etc.)
+- **Retrieve**: Fetch details of a specific customer by its ID
+- **Update**: Modify customer details (lastName, firstName, phone, email, dateOfBirth, status, etc.)
+- **Delete**: Remove a customer record
+- **List**: Query customers with optional filtering by `customerId` and `status`
+
+### Key Highlights
+- **PostgreSQL Persistence**: Employs native ACE ESQL database queries (`INSERT`, `SELECT`, `UPDATE`, `DELETE`) referencing datasource `MY_PG_DSN`.
+- **Contract-First Design**: OpenAPI 3.0 specification (`openapi.json`) synchronized with the ACE REST API descriptor (`restapi.descriptor`).
+- **Resilient ESQL Coding**: Uses `FIELDVALUE(...)`, strict type-checking, case-tolerant property extraction, `(JSON.Array)` typing, and dual-casing fallbacks for ODBC column names.
+
+---
+
+## 📁 Project Structure
+
+```
+customers/
+├── .project                                  # Eclipse & ACE Toolkit project definition
+├── .settings/
+│   └── org.eclipse.core.resources.prefs      # Resource encoding preferences (UTF-8)
+├── restapi.descriptor                        # ACE REST API operation mappings
+├── openapi.json                              # OpenAPI 3.0 API definition
+├── schema.sql                                # PostgreSQL DDL and seed data script
+├── skills.md                                 # Technical and integration knowledge notes
+├── README.md                                 # Project documentation and test guide
+│
+├── gen/
+│   └── Customers.msgflow                      # Generated REST API main message flow
+│
+├── createCustomer.subflow                     # Subflow: POST /v1/customers
+├── createCustomer_Compute.esql                # ESQL: Insert into PostgreSQL
+│
+├── getCustomer.subflow                        # Subflow: GET /v1/customers/{customerId}
+├── getCustomer_Compute.esql                   # ESQL: Single row query
+│
+├── updateCustomer.subflow                     # Subflow: PUT /v1/customers/{customerId}
+├── updateCustomer_Compute.esql                # ESQL: Database UPDATE
+│
+├── deleteCustomer.subflow                     # Subflow: DELETE /v1/customers/{customerId}
+├── deleteCustomer_Compute.esql                # ESQL: Database DELETE
+│
+├── listCustomers.subflow                      # Subflow: GET /v1/customers
+└── listCustomers_Compute.esql                 # ESQL: Multi-row query & JSON array builder
+```
+
+---
+
+## 🗄️ Database Setup (PostgreSQL)
+
+Execute `schema.sql` against your PostgreSQL database:
+
+```bash
+psql -h localhost -U postgres -d banking_db -f schema.sql
+```
+
+          "customerId",
+          "lastName",
+          "firstName",
+          "phone",
+          "email",
+          "dateOfBirth",
+          "status"
+
+    customer_id      VARCHAR(64)    NOT NULL,
+    first_name       VARCHAR(32)    NOT NULL,
+    last_name        VARCHAR(32)    NOT NULL,
+    email            VARCHAR(48)    NOT NULL,
+    phone            VARCHAR(16)    NOT NULL,
+    date_of_birth    VARCHAR(16)    NOT NULL,
+    status           VARCHAR(20)    NOT NULL,
+
+### Table Definition (`public.customers`)
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `customer_id` | `VARCHAR(64)` | `PRIMARY KEY` | Unique customer ID (e.g., `CUS-xxxxxxxxxxxx`) |
+| `first_name` | `VARCHAR(32)` | `NOT NULL` | First name |
+| `last_name` | `VARCHAR(32)` | `NOT NULL` | Last name |
+| `email` | `VARCHAR(48)` | `NOT NULL` | Email |
+| `phone` | `VARCHAR(16)` | `NOT NULL` | Phone |
+| `dateOfBirth` | `VARCHAR(16)` | `NOT NULL` | Date of birth |
+| `status` | `VARCHAR(20)` | `CHECK IN ('ACTIVE', 'INACTIVE')` | Customer status |
+
+### ACE ODBC Runtime Configuration
+
+1. In `/var/mqsi/odbc/odbc.ini` (or `$ODBCINI`):
+```ini
+[ODBC Data Sources]
+MY_PG_DSN=PostgreSQL Wire Protocol
+
+[MY_PG_DSN]
+Driver=/opt/ibm/ace-12.0.12.0/server/ODBC/drivers/lib/UKsqls95.so
+Description=IBM App Connect Enterprise PostgreSQL Wire Protocol
+Database=banking_db
+HostName=localhost
+PortNumber=5432
+LogonID=postgres
+Password=secret
+```
+
+2. Register credentials with the ACE Integration Node:
+```bash
+mqsisetdbparms <IntegrationNodeName> -n odbc::MY_PG_DSN -u postgres -p secret
+mqsicvp <IntegrationNodeName> -n MY_PG_DSN
+```
+
+---
+
+## 🚀 API Endpoints & Testing
+
+Base path: `/v1/customer`
+
+### 1. Create Customer
+- **Method**: `POST`
+- **Path**: `/v1/customers/`
+- **Request Body**:
+```json
+{
+  "firstName": "Alice",
+  "lastName": "Lim",
+  "email": "alice.lim@example.com",
+  "phone": "+65-9634-1112",
+  "dateOfBirth": "1/24/1996",
+  "status": "ACTIVE"
+}
+```
+- **Curl**:
+```bash
+curl -X POST http://localhost:7800/v1/customers/ \
+  -H "Content-Type: application/json" \
+  -d '{
+  "firstName": "Alice",
+  "lastName": "Lim",
+  "email": "alice.lim@example.com",
+  "phone": "+65-9634-1112",
+  "dateOfBirth": "1/24/1996",
+  "status": "ACTIVE"
+  }'
+```
+- **Response**: `201 Created`
+
+---
+
+### 2. Retrieve Customer by ID
+- **Method**: `GET`
+- **Path**: `/v1/customers/{customerId}`
+- **Curl**:
+```bash
+curl -X GET http://localhost:7800/v1/customers/CUS-123456789012
+```
+- **Response**: `200 OK`
+```json
+{
+  "customerId": "CUS-123456789012",
+  "firstName": "Alice",
+  "lastName": "Lim",
+  "email": "alice.lim@example.com",
+  "phone": "+65-9634-1112",
+  "dateOfBirth": "1/24/1996",
+  "status": "ACTIVE"
+}
+```
+
+---
+
+### 3. Update Customer by ID
+- **Method**: `PUT`
+- **Path**: `/v1/customers/{customerId}`
+- **Request Body**:
+```json
+{
+  "status": "INACTIVE"
+}
+```
+- **Curl**:
+```bash
+curl -X PUT http://localhost:7800/v1/customer/CUS-123456789012 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "INACTIVE"
+  }'
+```
+- **Response**: `200 OK`
+
+---
+
+### 4. Delete Customer by ID
+- **Method**: `DELETE`
+- **Path**: `/v1/customers/{customerId}`
+- **Curl**:
+```bash
+curl -X DELETE http://localhost:7800/v1/customers/ACC-123456789012
+```
+- **Response**: `204 No Content` (Empty body)
+
+---
+
+### 5. List All Customers (with Filters)
+- **Method**: `GET`
+- **Path**: `/v1/customers/`
+- **Query Parameters**:
+  - `customerId` (optional): e.g. `?customerId=CUS-123456789012`
+  - `status` (optional): e.g. `?status=COMPLETED`
+- **Curl**:
+```bash
+# List all customer
+curl -X GET http://localhost:7800/v1/customers/
+
+# Filter by status
+curl -X GET "http://localhost:7800/v1/customers?status=ACTIVE"
+```
+- **Response**: `200 OK` (Array of customers)

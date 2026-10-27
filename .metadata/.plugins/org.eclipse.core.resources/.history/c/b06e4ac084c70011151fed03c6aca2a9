@@ -1,0 +1,75 @@
+CREATE COMPUTE MODULE deleteTransaction_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- 1. Copy headers to preserve HTTP transport context
+		CALL CopyMessageHeaders();
+		
+		-- 2. Extract path parameter
+		DECLARE v_TransactionId CHAR InputLocalEnvironment.REST.Input.Parameters.transactionId;
+		
+		CREATE FIELD OutputRoot.JSON.Data;
+		DECLARE outputDataRef REFERENCE TO OutputRoot.JSON.Data;
+		
+		-- 2. Establish input reference
+		DECLARE inputDataRef REFERENCE TO InputRoot.JSON.Data;
+		IF NOT LASTMOVE(inputDataRef) THEN
+			SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 400;
+			-- CREATE FIELD OutputRoot.JSON.Data;
+			SET outputDataRef.error = 'Bad Request';
+			SET outputDataRef.message = 'No JSON data found in input message.';
+			RETURN TRUE;
+		END IF;
+		
+		DECLARE DBSchema CHARACTER 'public';
+		DECLARE DBTable  CHARACTER 'transactions';
+		
+		-- 3. Check if target transaction exists in PostgreSQL
+		DECLARE transaction ROW;
+		SET transaction.Record[] = SELECT
+			T.transaction_id 	AS transaction_id
+		FROM Database.{DBSchema}.{DBTable} AS T
+		WHERE T.transaction_id = v_TransactionId;
+		
+		IF (SQLCODE = 0) THEN
+			IF CARDINALITY(transaction.Record[]) > 0 THEN			
+				-- 4. Delete record from PostgreSQL
+				DELETE FROM Database.{DBSchema}.{DBTable} AS T WHERE T.transaction_id = v_TransactionId;
+				IF (SQLCODE = 0) THEN				
+					-- Success: HTTP 204 No Content (Payload must be completely empty)
+					SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 204;
+					DELETE FIELD OutputRoot.JSON;					
+				ELSE
+					SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '500';
+					SET outputDataRef.error   = 'SQL Error';
+					SET outputDataRef.message = 'Delete failed. The database SQLSTATE was ' || CAST(SQLSTATE AS CHAR) || ' and the SQLCODE was ' || CAST(SQLCODE AS CHAR);
+				END IF;
+			ELSE
+				-- Failure: Record not found (HTTP 404)
+				SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 404;
+				SET outputDataRef.error = 'Transaction not found';
+				SET outputDataRef.message = 'The transactionId ' || v_TransactionId || ' does not exist.';
+			END IF;
+		ELSE
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '500';
+			SET outputDataRef.error   = 'SQL Error';
+			SET outputDataRef.message = 'Delete failed. The database SQLSTATE was ' || CAST(SQLSTATE AS CHAR) || ' and the SQLCODE was ' || CAST(SQLCODE AS CHAR);
+		END IF;
+		RETURN TRUE;
+		
+
+
+
+		
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+END MODULE;

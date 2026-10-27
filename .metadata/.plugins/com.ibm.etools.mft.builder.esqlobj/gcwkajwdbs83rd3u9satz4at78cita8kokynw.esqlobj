@@ -1,0 +1,45 @@
+/*EATE FUNCTION Main() RETURNS BOOLE*/
+	BEGIN
+		-- Retrieve accountId from the HTTP path parameter
+		DECLARE v_AccountId CHARACTER InputLocalEnvironment.REST.Input.Parameters.accountId;
+		DECLARE account    ROW;
+		DECLARE DBSchema CHARACTER 'public';	
+		DECLARE DBTable  CHARACTER 'accounts';
+		
+		SET account.Record[] = SELECT
+			A.account_id    AS account_id,
+			A.customer_name AS customer_name,
+			A.account_type  AS account_type,
+			A.balance       AS balance,
+			A.currency      AS currency,
+			A.status        AS status
+		FROM Database.{DBSchema}.{DBTable} AS A 
+		WHERE A.account_id = v_AccountId;
+				
+		SET OutputRoot.Properties = InputRoot.Properties;
+		CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+		CREATE FIELD OutputRoot.JSON.Data;
+		-- CREATE FIELD OutputRoot.JSON.Data TYPE JSON.Object;
+
+		IF (SQLCODE = 0) THEN
+			-- IF EXISTS(refAccount.*[]) THEN
+			IF CARDINALITY(account.Record[]) > 0 THEN
+				SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '200';
+				SET OutputRoot.JSON.Data.account_id    	= account.Record[1].account_id;
+				SET OutputRoot.JSON.Data.customer_name 	= account.Record[1].customer_name;
+				SET OutputRoot.JSON.Data.account_type  	= account.Record[1].account_type;
+				SET OutputRoot.JSON.Data.balance      	= account.Record[1].balance;
+				SET OutputRoot.JSON.Data.currency     	= account.Record[1].currency;
+				SET OutputRoot.JSON.Data.status       	= account.Record[1].status;
+			ELSE
+				SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '404';
+				SET OutputRoot.JSON.Data.error   = 'Not found';
+				SET OutputRoot.JSON.Data.message = 'Account ' || v_AccountId || ' not found';	
+			END IF;
+		ELSE
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '500';			
+			SET OutputRoot.JSON.Data.error   = 'SQL Error';
+            SET OutputRoot.JSON.Data.message = 'Select operation failed. The database SQLSTATE was ' || CAST(SQLSTATE AS CHAR) || ' and the SQLCODE was ' || CAST(SQLCODE AS CHAR); 
+		END IF;
+		RETURN TRUE;
+	END;

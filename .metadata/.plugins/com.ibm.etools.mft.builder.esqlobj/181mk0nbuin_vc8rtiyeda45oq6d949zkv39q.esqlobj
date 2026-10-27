@@ -1,0 +1,100 @@
+CREATE COMPUTE MODULE updateAccount_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- 1. Copy headers to preserve HTTP transport context
+		CALL CopyMessageHeaders();
+
+		-- 2. Retrieve accountId from the HTTP path parameter
+		DECLARE v_AccountId CHARACTER InputLocalEnvironment.REST.Input.Parameters.accountId;
+
+		-- 3. Reference Input JSON Data
+		DECLARE inputDataRef REFERENCE TO InputRoot.JSON.Data;
+
+		-- 4. Reference Output JSON Data
+		CREATE FIELD OutputRoot.JSON.Data;
+		DECLARE outputDataRef REFERENCE TO OutputRoot.JSON.Data;
+		
+		-- 5. Check JSON Data Exist
+		IF NOT LASTMOVE(inputDataRef) THEN
+			SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 400;
+			SET outputDataRef.status = 'Bad Request';
+			SET outputDataRef.message = 'No JSON data found in input message.';
+			RETURN TRUE;
+		END IF;
+		
+		DECLARE DBSchema CHARACTER 'public';	
+		DECLARE DBTable  CHARACTER 'accounts';
+		
+		-- 6. Check if target account exists
+		DECLARE transaction ROW;
+		DECLARE account 	  	ROW;		
+		SET account.Record[] = SELECT
+			A.account_id        AS account_id,
+			A.customer_id       AS customer_id,
+			A.account_type      AS account_type,
+			A.balance           AS balance,
+			A.currency          AS currency,
+			A.status            AS status
+		FROM Database.{DBSchema}.{DBTable} AS A
+		WHERE A.account_id = v_Account_id;
+		
+		IF (SQLCODE = 0) THEN
+			IF CARDINALITY(account.Record[]) > 0 THEN
+				-- CONTINUE;
+			ELSE
+				SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '404';
+				SET outputDataRef.error = 'Account not found';
+				SET outputDataRef.message = 'The accountId ' || v_AccountId || ' does not exist.';
+				RETURN TRUE;
+			END IF;
+		ELSE
+			RETURN TRUE;
+		END IF;
+
+		-- 7. Extract and map input data fields using FIELDVALUE
+		DECLARE v_CustomerId 	CHARACTER FIELDVALUE(inputDataRef.customerId);
+		DECLARE v_AccountType  	CHARACTER FIELDVALUE(inputDataRef.accountType);
+		DECLARE v_Balance      	DECIMAL FIELDVALUE(inputDataRef.balance);
+		DECLARE v_Currency     	CHARACTER FIELDVALUE(reqRef.currency);
+		DECLARE v_Status       	CHARACTER FIELDVALUE(reqRef.status);
+
+		-- Update account in PostgreSQL via ODBC datasource MY_PG_DSN
+		UPDATE Database.{DBSchema}.{DBTable} AS A
+			SET customer_name = v_CustomerName,
+			    account_type  = v_AccountType,
+			    balance       = v_Balance,
+			    currency      = v_Currency,
+			    status        = v_Status
+			WHERE A.account_id = v_AccountId;
+
+		SET OutputRoot.Properties = InputRoot.Properties;			
+		CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+		CREATE FIELD OutputRoot.JSON.Data;
+		IF (SQLCODE = 0) THEN
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '200';
+			SET outputDataRef.status = 'success';
+			SET outputDataRef.message = 'Account ' || v_AccountId || ' updated successfully.';
+			SET OutputRoot.JSON.Data.AccountId    = v_AccountId;
+			SET OutputRoot.JSON.Data.CustomerName = v_CustomerName;
+			SET OutputRoot.JSON.Data.AccountType  = v_AccountType;
+			SET OutputRoot.JSON.Data.Balance      = v_Balance;
+			SET OutputRoot.JSON.Data.Currency     = v_Currency;
+			SET OutputRoot.JSON.Data.Status       = v_Status;		
+		ELSE
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '500';			
+			SET OutputRoot.JSON.Data.error   = 'SQL Error';
+            SET OutputRoot.JSON.Data.message = 'Update operation failed. The database SQLSTATE was ' || CAST(SQLSTATE AS CHAR) || ' and the SQLCODE was ' || CAST(SQLCODE AS CHAR); 
+		END IF;
+		RETURN TRUE;
+	END;
+	
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+END MODULE;

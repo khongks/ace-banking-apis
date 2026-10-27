@@ -1,0 +1,43 @@
+CREATE COMPUTE MODULE getAccountsAccountId_Compute
+    CREATE FUNCTION Main() RETURNS BOOLEAN
+    BEGIN
+        SET OutputRoot.Properties = InputRoot.Properties;
+        DECLARE MY_PG_DSN CHARACTER;
+        SET MY_PG_DSN = Environment.Variables.MY_PG_DSN;
+
+        -- Extract Path Parameter
+        DECLARE accId CHARACTER InputLocalEnvironment.REST.Input.Parameters.accountId;
+        IF accId IS NULL OR TRIM(accId) = '' THEN
+            CALL SetHttpError(400, 'ERR_MISSING_PARAMETER', 'Path parameter accountId is required.');
+            RETURN TRUE;
+        END IF;
+
+        -- Query PostgreSQL database by AccountId
+        DECLARE dbResult ROW;
+        SET dbResult.Account[] = PASSTHRU('SELECT account_id, customer_name, account_type, balance, currency, status FROM accounts WHERE account_id = ?'
+            TO Database.{MY_PG_DSN}
+            VALUES(accId));
+
+        -- Check if Account exists
+        IF CARDINALITY(dbResult.Account[]) = 0 THEN
+            CALL SetHttpError(404, 'ERR_ACCOUNT_NOT_FOUND', 'Account with ID ''' || accId || ''' was not found.');
+            RETURN TRUE;
+        END IF;
+
+        -- Populate HTTP 200 OK Response
+        SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 200;
+        CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+        CREATE FIELD OutputRoot.JSON.Data;
+        DECLARE outData REFERENCE TO OutputRoot.JSON.Data;
+
+        DECLARE dbAcc REFERENCE TO dbResult.Account[1];
+        SET outData.AccountId    = dbAcc.account_id;
+        SET outData.CustomerName  = dbAcc.customer_name;
+        SET outData.AccountType   = dbAcc.account_type;
+        SET outData.Balance       = CAST(dbAcc.balance AS DECIMAL);
+        SET outData.Currency      = dbAcc.currency;
+        SET outData.Status        = dbAcc.status;
+
+        RETURN TRUE;
+    END;
+END MODULE;

@@ -1,0 +1,396 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Transactions API",
+    "description": "REST API for managing banking transactions.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "/v1/transactions"
+    }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "summary": "List all transactions",
+        "operationId": "listTransactions",
+        "tags": [
+          "transactions"
+        ],
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter transactions by account Id"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/TransactionStatus"
+            },
+            "description": "Filter transactions by status",
+            "example": "COMPLETED"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of transactions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Transaction"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a new transaction",
+        "operationId": "createTransaction",
+        "tags": [
+          "transactions"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransactionInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Transaction created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input / validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{transactionId}": {
+      "get": {
+        "summary": "Get transaction",
+        "operationId": "getTransaction",
+        "tags": [
+          "transactions"
+        ],
+        "parameters": [
+          {
+            "name": "transactionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The unique transaction ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Transaction details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transaction"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Transaction not found"
+          }
+        }
+      },
+      "put": {
+        "summary": "Update transaction",
+        "operationId": "updateTransaction",
+        "tags": [
+          "transactions"
+        ],
+        "parameters": [
+          {
+            "name": "transactionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The unique transaction ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransactionUpdateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transaction updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input / validation error"
+          },
+          "404": {
+            "description": "Transaction not found"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete transaction",
+        "operationId": "deleteTransaction",
+        "tags": [
+          "transactions"
+        ],
+        "parameters": [
+          {
+            "name": "transactionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The unique transaction ID"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Transaction deleted successfully"
+          },
+          "404": {
+            "description": "Transaction not found"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Transaction": {
+        "type": "object",
+        "required": [
+          "transactionId",
+          "accountId",
+          "amount",
+          "currency",
+          "transactionType",
+          "status"
+        ],
+        "properties": {
+          "transactionId": {
+            "type": "string",
+            "description": "Unique identifier of the transaction",
+            "example": "TXN-10001"
+          },
+          "accountId": {
+            "type": "string",
+            "description": "Account ID associated with this transaction",
+            "example": "ACC-12345"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double",
+            "description": "Transaction monetary amount",
+            "example": 250.75
+          },
+          "currency": {
+            "type": "string",
+            "description": "3-letter currency code",
+            "default": "USD",
+            "example": "USD"
+          },
+          "transactionType": {
+            "$ref": "#/components/schemas/TransactionType"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TransactionStatus"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description or narration of the transaction",
+            "example": "Online transfer"
+          },
+          "createdDate": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Transaction timestamp"
+          },
+          "updatedDate": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Last update timestamp"
+          }
+        }
+      },
+      "TransactionInput": {
+        "type": "object",
+        "required": [
+          "accountId",
+          "amount",
+          "transactionType"
+        ],
+        "properties": {
+          "transactionId": {
+            "type": "string",
+            "description": "Optional unique ID. If omitted, will be generated automatically.",
+            "example": "TXN-10001"
+          },
+          "accountId": {
+            "type": "string",
+            "description": "Account ID associated with this transaction",
+            "example": "ACC-12345"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double",
+            "description": "Transaction monetary amount",
+            "example": 250.75
+          },
+          "currency": {
+            "type": "string",
+            "description": "3-letter currency code",
+            "default": "USD",
+            "example": "USD"
+          },
+          "transactionType": {
+            "$ref": "#/components/schemas/TransactionType"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TransactionStatus",
+            "default": "COMPLETED"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description or narration of the transaction",
+            "example": "Payroll deposit"
+          }
+        }
+      },
+      "TransactionUpdateInput": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "description": "Account ID associated with this transaction"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double",
+            "description": "Transaction monetary amount"
+          },
+          "currency": {
+            "type": "string",
+            "description": "3-letter currency code"
+          },
+          "transactionType": {
+            "$ref": "#/components/schemas/TransactionType"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TransactionStatus"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description or narration of the transaction"
+          }
+        }
+      },
+      "TransactionResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "success"
+          },
+          "message": {
+            "type": "string",
+            "example": "Transaction TXN-10001 created successfully."
+          },
+          "transaction": {
+            "$ref": "#/components/schemas/Transaction"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "TransactionStatus": {
+        "type": "string",
+        "enum": [
+          "PENDING",
+          "COMPLETED",
+          "FAILED",
+          "CANCELLED"
+        ],
+        "description": "Lifecycle status of the transaction"
+      },
+      "TransactionType": {
+        "type": "string",
+        "enum": [
+          "DEPOSIT",
+          "WITHDRAWAL",
+          "TRANSFER",
+          "PAYMENT"
+        ],
+        "description": "Financial operation type"
+      }
+    }
+  },
+  "x-ibm-configuration": {}
+}

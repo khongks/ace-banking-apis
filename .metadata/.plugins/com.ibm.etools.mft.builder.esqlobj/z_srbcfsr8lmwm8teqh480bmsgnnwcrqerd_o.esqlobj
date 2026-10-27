@@ -1,0 +1,19 @@
+/*EATE FUNCTION Main() RETURNS BOOLE*/
+	BEGIN
+		-- Build JSON array response
+		SET OutputRoot.Properties = InputRoot.Properties;
+		CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+		CREATE FIELD OutputRoot.JSON.Data IDENTITY (JSON.Array)Data;
+		
+		DECLARE DBSchema CHARACTER 'public';	
+		DECLARE DBTable  CHARACTER 'accounts';
+		
+		SET OutputRoot.JSON.Data.accounts.Items = SELECT * FROM Database.{DBSchema}.{DBTable} AS A;
+		IF (SQLCODE = 0) THEN
+
+		ELSE
+
+		END IF;
+		
+		RETURN TRUE;
+	END;

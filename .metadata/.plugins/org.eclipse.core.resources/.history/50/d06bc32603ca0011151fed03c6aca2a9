@@ -1,0 +1,8 @@
+{
+  "FirstName": "Alice",
+  "LastName": "Lim",
+  "Email": "alice.lim@example.com",
+  "Phone": "+65-9634-1112",
+  "DateOfBirth": "1/24/1996",
+  "Status": "ACTIVE"
+}

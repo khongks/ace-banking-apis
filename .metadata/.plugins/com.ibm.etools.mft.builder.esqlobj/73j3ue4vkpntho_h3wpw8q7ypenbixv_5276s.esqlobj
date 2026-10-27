@@ -1,0 +1,83 @@
+/*EATE FUNCTION Main() RETURNS BOOLE*/
+	BEGIN
+		-- 1. Copy headers to preserve HTTP transport context downstream
+		CALL CopyMessageHeaders();
+		
+		-- 2. Reference Input JSON Data
+		DECLARE inputDataRef REFERENCE TO InputRoot.JSON.Data;
+
+		-- 3. Reference Output JSON Data
+		CREATE FIELD OutputRoot.JSON.Data;
+		DECLARE outputDataRef REFERENCE TO OutputRoot.JSON.Data;
+		
+		-- 4. Check JSON Data Exist
+		IF NOT LASTMOVE(inputDataRef) THEN
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '400';
+			SET outputDataRef.status = 'Bad Request';
+			SET outputDataRef.message = 'No JSON data found in input message.';
+			RETURN TRUE;
+		END IF;
+
+		-- 5. Extract and map input data fields using FIELDVALUE.
+		
+		DECLARE v_CustomerId CHARACTER FIELDVALUE(inputDataRef.customerId);
+		DECLARE v_AccountType  CHARACTER FIELDVALUE(inputDataRef.accountType);
+		DECLARE v_Balance      DECIMAL FIELDVALUE(inputDataRef.balance);
+		DECLARE v_Currency     CHARACTER FIELDVALUE(inputDataRef.currency);
+		DECLARE v_Status       CHARACTER FIELDVALUE(inputDataRef.status);
+		DECLARE v_AccountId    CHARACTER;
+		
+		-- 6. Validate mandatory and enum fields
+		IF v_AccountId IS NULL OR v_AccountId = '' THEN
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '400';
+			SET outputDataRef.error = 'Validation Error';
+			SET outputDataRef.message = 'accountId is required';
+			RETURN TRUE;
+		END IF;
+
+		-- Generates ACC-YYMMDDHHMM (e.g., ACC-2610112343)
+		SET v_AccountId = 'ACC-' || SUBSTRING(CAST(EXTRACT(YEAR FROM CURRENT_TIMESTAMP) AS CHARACTER) FROM 3 FOR 2)
+          		                 || RIGHT('0' || CAST(EXTRACT(MONTH FROM CURRENT_TIMESTAMP) AS CHARACTER), 2)
+          		               	 || RIGHT('0' || CAST(EXTRACT(DAY FROM CURRENT_TIMESTAMP) AS CHARACTER), 2)
+          		                 || RIGHT('0' || CAST(EXTRACT(HOUR FROM CURRENT_TIMESTAMP) AS CHARACTER), 2)
+                		         || RIGHT('0' || CAST(EXTRACT(MINUTE FROM CURRENT_TIMESTAMP) AS CHARACTER), 2);
+		
+		DECLARE DBSchema CHARACTER 'public';	
+		DECLARE DBTable  CHARACTER 'accounts';
+		-- Insert new account into PostgreSQL via ODBC datasource MY_PG_DSN
+		INSERT INTO Database.{DBSchema}.{DBTable}
+			(account_id, customer_name, account_type, balance, currency, status) 
+		VALUES 
+			(v_AccountId, v_CustomerName, v_AccountType, v_Balance, v_Currency, v_Status);
+
+		SET OutputRoot.Properties = InputRoot.Properties;		
+		CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+		CREATE FIELD OutputRoot.JSON.Data;
+
+		IF (SQLCODE = 0) THEN
+			-- Build JSON response with 201 status
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '201';
+	        SET OutputRoot.JSON.Data.Result = 'A row was inserted into the database successfully.';
+			SET OutputRoot.JSON.Data.Account.AccountId    = v_AccountId;
+			SET OutputRoot.JSON.Data.Account.CustomerName = v_CustomerName;
+			SET OutputRoot.JSON.Data.Account.AccountType  = v_AccountType;
+			SET OutputRoot.JSON.Data.Account.Balance      = v_Balance;
+			SET OutputRoot.JSON.Data.Account.Currency     = v_Currency;
+			SET OutputRoot.JSON.Data.Account.Status       = v_Status;			
+		ELSE
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '500';			
+			SET OutputRoot.JSON.Data.error   = 'SQL Error';
+            SET OutputRoot.JSON.Data.message = 'Insert operation failed. The database SQLSTATE was ' || CAST(SQLSTATE AS CHAR) || ' and the SQLCODE was ' || CAST(SQLCODE AS CHAR); 
+		END IF;
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;

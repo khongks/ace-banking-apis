@@ -1,0 +1,7 @@
+{
+  "customerName": "Sarah Connor",
+  "accountType": "SAVINGS",
+  "balance": 5200.50,
+  "currency": "USD",
+  "status": "ACTIVE"
+}

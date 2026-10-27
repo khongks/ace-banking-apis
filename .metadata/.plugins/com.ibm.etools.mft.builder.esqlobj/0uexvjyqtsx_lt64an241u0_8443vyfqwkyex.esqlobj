@@ -1,0 +1,39 @@
+CREATE COMPUTE MODULE deleteAccount_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- Retrieve accountId from the HTTP path parameter
+		DECLARE v_AccountId CHARACTER InputLocalEnvironment.REST.Input.Parameters.accountId;
+
+		DECLARE v_Found BOOLEAN FALSE;
+
+		-- Check account exists
+		SET account = (SELECT P FROM Database.public.accounts AS P WHERE P.account_id = v_AccountId);	
+		IF account.account_id IS NOT NULL THEN
+			SET v_Found = TRUE;
+		ELSE
+			SET v_Found = FALSE;
+		END IF;
+
+		IF v_Found = FALSE THEN
+			SET OutputRoot.Properties = InputRoot.Properties;
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '404';
+			CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+			CREATE FIELD OutputRoot.JSON.Data;
+			SET OutputRoot.JSON.Data.error   = 'NOT_FOUND';
+			SET OutputRoot.JSON.Data.message = 'Account ' || v_AccountId || ' not found';
+			RETURN TRUE;
+		END IF;
+
+		-- Delete account from PostgreSQL via ODBC datasource MY_PG_DSN
+		DELETE FROM Database.MY_PG_DSN.accounts WHERE account_id = v_AccountId;
+
+		-- Build JSON response
+		SET OutputRoot.Properties = InputRoot.Properties;
+		CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+		CREATE FIELD OutputRoot.JSON.Data;
+
+		SET OutputRoot.JSON.Data.message = 'Account ' || v_AccountId || ' deleted successfully';
+
+		RETURN TRUE;
+	END;
+END MODULE;

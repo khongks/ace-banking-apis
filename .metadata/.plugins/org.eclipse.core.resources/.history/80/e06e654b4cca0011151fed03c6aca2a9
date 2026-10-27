@@ -1,0 +1,8 @@
+{
+  "accountId": "ACC-10001",
+  "amount": 500.00,
+  "currency": "AUD",
+  "transactionType": "TRANSFER",
+  "status": "COMPLETED",
+  "description": "Credit card"
+}

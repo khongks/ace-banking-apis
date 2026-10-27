@@ -1,0 +1,4 @@
+eclipse.preferences.version=1
+mcpExtensionPointContrib={}
+mcpToolsModeStatus={"agent-mode"\:{"Built-in Tools"\:{"run_in_terminal"\:true,"apply_patch"\:true,"manage_todo_list"\:true,"get_errors"\:true,"replace_string_in_file"\:true,"create_file"\:true,"get_terminal_output"\:true,"list_dir"\:true,"file_search"\:true,"grep_search"\:true,"validate_cves"\:true,"insert_edit_into_file"\:true,"read_file"\:true}}}
+mcpToolsStatus={"Built-in Tools"\:{"run_in_terminal"\:true,"apply_patch"\:true,"manage_todo_list"\:true,"get_errors"\:true,"replace_string_in_file"\:true,"create_file"\:true,"get_terminal_output"\:true,"list_dir"\:true,"file_search"\:true,"grep_search"\:true,"validate_cves"\:true,"insert_edit_into_file"\:true,"read_file"\:true}}

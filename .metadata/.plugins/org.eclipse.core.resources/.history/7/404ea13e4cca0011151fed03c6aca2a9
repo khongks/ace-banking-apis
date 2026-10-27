@@ -1,0 +1,7 @@
+{
+  "customerId": "ACC-10001",
+  "accountType": "SAVINGS",
+  "balance": 5200.50,
+  "currency": "USD",
+  "status": "ACTIVE"
+}

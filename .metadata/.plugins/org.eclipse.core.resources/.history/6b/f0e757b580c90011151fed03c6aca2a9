@@ -1,0 +1,68 @@
+-- =============================================================================
+-- PostgreSQL Database Schema for Transactions REST API
+-- Project: Accounts
+-- IBM App Connect Enterprise (ACE) / ESQL Integration
+-- =============================================================================
+
+-- 1. Create table public.transactions
+CREATE TABLE IF NOT EXISTS public.accounts (
+    account_id       VARCHAR(64)    NOT NULL,
+    customer_id      VARCHAR(64)    NOT NULL,
+    account_type     VARCHAR(20)    NOT NULL CHECK (transaction_type IN ('SAVINGS', 'CHECK', 'CREDIT')),
+    balance          NUMERIC(15, 2) NOT NULL,
+    currency         VARCHAR(3)     NOT NULL DEFAULT 'USD',
+    status           VARCHAR(20)    NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'INACTIVE')),
+    CONSTRAINT pk_transactions PRIMARY KEY (account_id)
+);
+
+-- 2. Indexes for query optimization
+CREATE INDEX IF NOT EXISTS idx_transactions_account_id 
+    ON public.transactions(account_id);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_status 
+    ON public.transactions(status);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_created_date 
+    ON public.transactions(created_date DESC);
+
+-- 3. Optional sample test records
+INSERT INTO public.transactions (
+    transaction_id, account_id, amount, currency, transaction_type, status, description, created_date, updated_date
+) VALUES 
+('TXN-1001', 'ACC-10001', 500.00, 'USD', 'DEPOSIT', 'COMPLETED', 'Initial opening deposit', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('TXN-1002', 'ACC-10001', 50.00,  'USD', 'WITHDRAWAL', 'COMPLETED', 'ATM cash withdrawal', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('TXN-1003', 'ACC-10002', 1200.50, 'USD', 'DEPOSIT', 'COMPLETED', 'Payroll direct deposit', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('TXN-1004', 'ACC-10002', 85.25,  'USD', 'PAYMENT', 'COMPLETED', 'Electric utility bill payment', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('TXN-1005', 'ACC-10003', 250.00, 'USD', 'TRANSFER', 'PENDING', 'Inter-bank fund transfer', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT (transaction_id) DO NOTHING;
+
+-- =============================================================================
+-- IBM App Connect Enterprise ODBC Setup Guide for PostgreSQL
+-- =============================================================================
+--
+-- 1. odbc.ini configuration (e.g. /var/mqsi/odbc/odbc.ini or $ODBCINI):
+--
+--    [ODBC Data Sources]
+--    MY_PG_DSN=PostgreSQL Wire Protocol
+--
+--    [MY_PG_DSN]
+--    Driver=/opt/ibm/ace-13.0.9.0/server/ODBC/drivers/lib/UKsqls95.so  (or DataDirect / psqlODBC driver)
+--    Description=IBM App Connect Enterprise PostgreSQL Wire Protocol
+--    Database=banking_db
+--    HostName=localhost
+--    PortNumber=5432
+--    LogonID=postgres
+--    Password=secret
+--
+-- 2. Configure credentials in ACE Integration Node / Server using mqsisetdbparms:
+--
+--    mqsisetdbparms <IntegrationNodeName> -n odbc::MY_PG_DSN -u <dbuser> -p <dbpassword>
+--
+--    For independent integration server:
+--    mqsisetdbparms --work-dir <work-dir> -n odbc::MY_PG_DSN -u <dbuser> -p <dbpassword>
+--
+-- 3. Verify connection:
+--
+--    mqsicvp <IntegrationNodeName> -n MY_PG_DSN
+--
+-- =============================================================================

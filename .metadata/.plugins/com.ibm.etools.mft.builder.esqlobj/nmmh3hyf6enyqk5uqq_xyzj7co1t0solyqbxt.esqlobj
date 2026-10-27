@@ -1,0 +1,40 @@
+CREATE COMPUTE MODULE deleteAccountsAccountId_Compute
+    CREATE FUNCTION Main() RETURNS BOOLEAN
+    BEGIN
+        SET OutputRoot.Properties = InputRoot.Properties;
+
+        -- Extract Path Parameter
+        DECLARE accId CHARACTER InputLocalEnvironment.REST.Input.Parameters.accountId;
+        IF accId IS NULL OR TRIM(accId) = '' THEN
+            CALL SetHttpError(400, 'ERR_MISSING_PARAMETER', 'Path parameter accountId is required.');
+            RETURN TRUE;
+        END IF;
+
+        -- Check if Account exists
+        DECLARE dbCheck ROW;
+        SET dbCheck.Account[] = PASSTHRU('SELECT account_id FROM accounts WHERE account_id = ?'
+            TO Database.{MY_PG_DSN}
+            VALUES(accId));
+
+        IF CARDINALITY(dbCheck.Account[]) = 0 THEN
+            CALL SetHttpError(404, 'ERR_ACCOUNT_NOT_FOUND', 'Account with ID ''' || accId || ''' was not found.');
+            RETURN TRUE;
+        END IF;
+
+        -- Execute SQL DELETE
+        PASSTHRU('DELETE FROM accounts WHERE account_id = ?'
+            TO Database.{POSTGRES_DSN}
+            VALUES(accId));
+
+        IF SQLCODE <> 0 THEN
+            CALL SetHttpError(500, 'ERR_DATABASE_DELETE', 'Database error during account deletion: ' || COALESCE(SQLERRORTEXT, 'Unknown SQL Error'));
+            RETURN TRUE;
+        END IF;
+
+        -- Set HTTP 204 No Content
+        SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 204;
+        SET OutputRoot.JSON = NULL;
+
+        RETURN TRUE;
+    END;
+END MODULE;

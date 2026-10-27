@@ -1,0 +1,27 @@
+CREATE COMPUTE MODULE deleteAccount_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- Retrieve accountId from the HTTP path parameter
+		DECLARE v_AccountId CHARACTER InputLocalEnvironment.REST.Input.Parameters.accountId;
+
+		DECLARE v_Found BOOLEAN FALSE;
+		
+		DECLARE DBTable  CHARACTER 'public.accounts';
+		-- Delete account from PostgreSQL via ODBC datasource MY_PG_DSN
+		DELETE FROM Database.{DBTable} AS P WHERE P.account_id = v_AccountId;
+	
+		SET OutputRoot.Properties = InputRoot.Properties;
+		CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+		CREATE FIELD OutputRoot.JSON.Data;
+
+		IF (SQLCODE = 0) THEN
+
+			-- Build JSON response
+			SET OutputRoot.JSON.Data.message = 'Account ' || v_AccountId || ' deleted successfully';
+		ELSE
+			
+		END IF;
+
+		RETURN TRUE;
+	END;
+END MODULE;

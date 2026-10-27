@@ -1,0 +1,78 @@
+/*EATE FUNCTION Main() RETURNS BOOLE*/
+	BEGIN
+		-- 1. Copy headers to preserve HTTP transport context
+		CALL CopyMessageHeaders();
+
+		-- Retrieve customerId from the HTTP path parameter
+		DECLARE v_CustomerId CHARACTER InputLocalEnvironment.REST.Input.Parameters.customerId;
+
+		-- Extract request body fields
+		DECLARE inputDataRef REFERENCE TO InputRoot.JSON.Data;
+		DECLARE v_FirstName   CHARACTER CAST(inputDataRef.FirstName   AS CHARACTER);
+		DECLARE v_LastName    CHARACTER CAST(inputDataRef.LastName    AS CHARACTER);
+		DECLARE v_Email       CHARACTER CAST(inputDataRef.Email       AS CHARACTER);
+		DECLARE v_Phone       CHARACTER CAST(inputDataRef.Phone       AS CHARACTER);
+		DECLARE v_DateOfBirth CHARACTER CAST(inputDataRef.DateOfBirth AS CHARACTER);
+		DECLARE v_Status      CHARACTER CAST(inputDataRef.Status      AS CHARACTER);
+
+		DECLARE DBSchema CHARACTER 'public';
+		DECLARE DBTable  CHARACTER 'customers';
+		
+		DECLARE customer ROW;
+		SET customer.Record[] = SELECT
+			T.customer_id 	AS customer_id
+		FROM Database.{DBSchema}.{DBTable} AS T
+		WHERE T.customer_id = v_CustomerId;
+		
+		IF (SQLCODE = 0) THEN
+			IF CARDINALITY(customer.Record[]) > 0 THEN
+				
+			ELSE
+				
+			END IF;
+		ELSE
+		END IF;
+
+		-- Update customer in PostgreSQL via ODBC datasource MY_PG_DSN
+		UPDATE Database.{DBSchema}.{DBTable} AS C
+			SET first_name    = v_FirstName,
+			    last_name     = v_LastName,
+			    email         = v_Email,
+			    phone         = v_Phone,
+			    date_of_birth = v_DateOfBirth,
+			    status        = v_Status
+			WHERE C.customer_id = v_CustomerId;
+
+		CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+		CREATE FIELD OutputRoot.JSON.Data;
+		DECLARE outputDataRef REFERENCE TO OutputRoot.JSON.Data;
+
+		IF (SQLCODE = 0) THEN
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '200';
+			SET outputDataRef.status = 'success';
+			SET outputDataRef.message = 'Customer ' || v_CustomerId || ' updated successfully.';
+			SET outputDataRef.Customer.CustomerId  = v_CustomerId;
+			SET outputDataRef.Customer.FirstName   = v_FirstName;
+			SET outputDataRef.Customer.LastName    = v_LastName;
+			SET outputDataRef.Customer.Email       = v_Email;
+			SET outputDataRef.Customer.Phone       = v_Phone;
+			SET outputDataRef.Customer.DateOfBirth = v_DateOfBirth;
+			SET outputDataRef.Customer.Status      = v_Status;
+		ELSE
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '500';
+			SET outputDataRef.error   = 'SQL Error';
+			SET outputDataRef.message = 'Update operation failed. The database SQLSTATE was ' || CAST(SQLSTATE AS CHAR) || ' and the SQLCODE was ' || CAST(SQLCODE AS CHAR);
+		END IF;
+
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;

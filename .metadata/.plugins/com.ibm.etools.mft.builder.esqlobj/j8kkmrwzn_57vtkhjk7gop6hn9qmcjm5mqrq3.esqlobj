@@ -1,0 +1,47 @@
+/*EATE FUNCTION Main() RETURNS BOOLE*/
+	BEGIN
+		-- Retrieve accountId from the HTTP path parameter
+		DECLARE v_AccountId CHARACTER InputLocalEnvironment.REST.Input.Parameters.accountId;
+
+		DECLARE v_CustomerName CHARACTER;
+		DECLARE v_AccountType  CHARACTER;
+		DECLARE v_Balance      DECIMAL;
+		DECLARE v_Currency     CHARACTER;
+		DECLARE v_Status       CHARACTER;
+		DECLARE v_RowCount     INTEGER 0;
+
+		-- Query PostgreSQL via ODBC datasource MY_PG_DSN
+		SELECT ITEM customer_name, ITEM account_type, ITEM balance, ITEM currency, ITEM status
+			INTO v_CustomerName, v_AccountType, v_Balance, v_Currency, v_Status
+			FROM Database.accounts
+			WHERE account_id = v_AccountId;
+
+		SET v_RowCount = CARDINALITY(SELECT ITEM a.account_id
+			FROM Database.accounts AS a
+			WHERE a.account_id = v_AccountId);
+
+		-- Return 404 if not found
+		IF v_RowCount = 0 THEN
+			SET OutputRoot.Properties         = InputRoot.Properties;
+			SET OutputRoot.HTTPResponseHeader.X-Original-HTTP-Status-Code = '404';
+			CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+			CREATE FIELD OutputRoot.JSON.Data;
+			SET OutputRoot.JSON.Data.error   = 'NOT_FOUND';
+			SET OutputRoot.JSON.Data.message = 'Account ' || v_AccountId || ' not found';
+			RETURN TRUE;
+		END IF;
+
+		-- Build JSON response
+		SET OutputRoot.Properties = InputRoot.Properties;
+		CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+		CREATE FIELD OutputRoot.JSON.Data;
+
+		SET OutputRoot.JSON.Data.AccountId    = v_AccountId;
+		SET OutputRoot.JSON.Data.CustomerName = v_CustomerName;
+		SET OutputRoot.JSON.Data.AccountType  = v_AccountType;
+		SET OutputRoot.JSON.Data.Balance      = v_Balance;
+		SET OutputRoot.JSON.Data.Currency     = v_Currency;
+		SET OutputRoot.JSON.Data.Status       = v_Status;
+
+		RETURN TRUE;
+	END;

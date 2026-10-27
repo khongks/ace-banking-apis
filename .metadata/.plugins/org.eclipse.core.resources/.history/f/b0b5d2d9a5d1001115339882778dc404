@@ -1,0 +1,28 @@
+## Create
+curl --request POST \
+  --url http://{hostname}:7800/v1/customers/ \
+  --header 'accept: application/json' \
+  --header 'content-type: application/json' \
+  --data @customer.json
+
+## Retrieve
+curl --request GET \
+  --url http://{hostname}:7800/v1/customers/REPLACE_CUSTOMERID \
+  --header 'accept: application/json'
+
+## Update
+curl --request PUT \
+  --url http://{hostname}:7800/v1/customers/REPLACE_CUSTOMERID \
+  --header 'accept: application/json' \
+  --header 'content-type: application/json' \
+  --data @customer.json
+
+## Delete
+curl --request DELETE \
+  --url http://{hostname}:7800/v1/customers/REPLACE_CUSTOMERID \
+  --header 'accept: application/json'
+  
+## List
+curl --request GET \
+  --url http://{hostname}:7800/v1/customers/ \
+  --header 'accept: application/json'

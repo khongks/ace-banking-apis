@@ -1,0 +1,83 @@
+/*EATE FUNCTION Main() RETURNS BOOLE*/
+    BEGIN
+        -- Preserve Environment and Properties
+        SET OutputRoot.Properties = InputRoot.Properties;
+        DECLARE MY_PG_DSN CHARACTER;
+        SET MY_PG_DSN = Environment.Variables.MY_PG_DSN;
+
+        -- Reference incoming JSON request body
+        DECLARE inData REFERENCE TO InputRoot.JSON.Data;
+        IF NOT LASTMOVE(inData) THEN
+            CALL SetHttpError(400, 'ERR_INVALID_BODY', 'Missing or invalid JSON request payload.');
+            RETURN TRUE;
+        END IF;
+
+        -- Extract input fields
+        DECLARE accId     CHARACTER FIELDVALUE(inData.AccountId);
+        DECLARE custName  CHARACTER FIELDVALUE(inData.CustomerName);
+        DECLARE accType   CHARACTER FIELDVALUE(inData.AccountType);
+        DECLARE balance   DECIMAL   CAST(FIELDVALUE(inData.Balance) AS DECIMAL);
+        DECLARE currency  CHARACTER FIELDVALUE(inData.Currency);
+        DECLARE status    CHARACTER FIELDVALUE(inData.Status);
+
+        -- Mandatory field validations
+        IF accId IS NULL OR TRIM(accId) = '' OR
+           custName IS NULL OR TRIM(custName) = '' OR
+           accType IS NULL OR
+           balance IS NULL OR
+           currency IS NULL OR TRIM(currency) = '' OR
+           status IS NULL THEN
+            CALL SetHttpError(400, 'ERR_VALIDATION_FAILED', 'All Account fields (AccountId, CustomerName, AccountType, Balance, Currency, Status) are required.');
+            RETURN TRUE;
+        END IF;
+
+        -- Validate Enum values
+        IF accType NOT IN ('SAVINGS', 'CHECKING', 'CREDIT') THEN
+            CALL SetHttpError(400, 'ERR_INVALID_ACCOUNT_TYPE', 'AccountType must be one of: SAVINGS, CHECKING, CREDIT.');
+            RETURN TRUE;
+        END IF;
+
+        IF status NOT IN ('ACTIVE', 'INACTIVE') THEN
+            CALL SetHttpError(400, 'ERR_INVALID_STATUS', 'Status must be ACTIVE or INACTIVE.');
+            RETURN TRUE;
+        END IF;
+
+        -- Check if Account already exists in PostgreSQL
+        DECLARE existingCount ROW;
+        SET existingCount.rows[] = PASSTHRU('SELECT COUNT(*) AS total FROM accounts WHERE account_id = ?' TO Database.{MY_PG_DSN} VALUES(accId));
+
+        IF CARDINALITY(existingCount.rows[]) > 0 AND existingCount.rows[1].total > 0 THEN
+            CALL SetHttpError(400, 'ERR_DUPLICATE_ACCOUNT', 'Account with ID ''' || accId || ''' already exists.');
+            RETURN TRUE;
+        END IF;
+
+        -- Insert record into PostgreSQL database
+        DECLARE currentTs CHARACTER CAST(CURRENT_TIMESTAMP AS CHARACTER FORMAT 'yyyy-MM-dd HH:mm:ss');
+        PASSTHRU('INSERT INTO accounts (account_id, customer_name, account_type, balance, currency, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+            TO Database.{MY_PG_DSN}
+            VALUES(accId, custName, accType, balance, currency, status, currentTs, currentTs));
+
+        -- Check for SQL execution errors
+        IF SQLCODE <> 0 THEN
+            CALL SetHttpError(500, 'ERR_DATABASE_INSERT', 'Database error during account creation: ' || COALESCE(SQLERRORTEXT, 'Unknown SQL Error'));
+            RETURN TRUE;
+        END IF;
+
+        -- Set HTTP 201 Created Status and Location header
+        SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 201;
+        SET OutputRoot.HTTPResponseHeader."Location" = '/accounts/v1/accounts/' || accId;
+
+        -- Construct Response JSON
+        CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+        CREATE FIELD OutputRoot.JSON.Data;
+        DECLARE outData REFERENCE TO OutputRoot.JSON.Data;
+
+        SET outData.AccountId    = accId;
+        SET outData.CustomerName  = custName;
+        SET outData.AccountType   = accType;
+        SET outData.Balance       = balance;
+        SET outData.Currency      = currency;
+        SET outData.Status        = status;
+
+        RETURN TRUE;
+    END;

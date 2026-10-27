@@ -1,0 +1,312 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Customers",
+    "description": "This is a REST API for CRUDL on Customers.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "/v1/customers"
+    }
+  ],
+  "paths": {
+    "/": {
+      "post": {
+        "summary": "Create a new customer",
+        "operationId": "createCustomer",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Customer created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List all customers",
+        "operationId": "listCustomers",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/CustomerStatus"
+            },
+            "description": "Filter customer by status",
+            "example": "ACTIVE"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of customers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Customer"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{customerId}": {
+      "get": {
+        "summary": "Retrieve customer details by ID",
+        "operationId": "getCustomer",
+        "parameters": [
+          {
+            "name": "customerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Customer"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update existing customer details",
+        "operationId": "updateCustomer",
+        "parameters": [
+          {
+            "name": "customerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Customer updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Customer"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a customer by ID",
+        "operationId": "deleteCustomer",
+        "parameters": [
+          {
+            "name": "customerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Customer": {
+        "type": "object",
+        "properties": {
+          "CustomerId": {
+            "type": "string",
+            "description": "Unique identifier for the customer"
+          },
+          "FirstName": {
+            "type": "string",
+            "description": "Customer first name"
+          },
+          "LastName": {
+            "type": "string",
+            "description": "Customer last name"
+          },
+          "Email": {
+            "type": "string",
+            "description": "Customer email address"
+          },
+          "Phone": {
+            "type": "string",
+            "description": "Customer phone number"
+          },
+          "DateOfBirth": {
+            "type": "string",
+            "description": "Customer date of birth (YYYY-MM-DD)"
+          },
+          "Status": {
+            "type": "string",
+            "description": "Customer status",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ]
+          }
+        }
+      },
+      "CustomerRequest": {
+        "type": "object",
+        "required": [
+          "FirstName",
+          "LastName",
+          "Email",
+          "Status"
+        ],
+        "properties": {
+          "FirstName": {
+            "type": "string",
+            "description": "Customer first name"
+          },
+          "LastName": {
+            "type": "string",
+            "description": "Customer last name"
+          },
+          "Email": {
+            "type": "string",
+            "description": "Customer email address"
+          },
+          "Phone": {
+            "type": "string",
+            "description": "Customer phone number"
+          },
+          "DateOfBirth": {
+            "type": "string",
+            "description": "Customer date of birth (YYYY-MM-DD)"
+          },
+          "Status": {
+            "type": "string",
+            "description": "Customer status",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ]
+          }
+        }
+      },
+      "MessageResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "CustomerStatus": {
+        "type": "string",
+        "enum": [
+          "ACTIVE",
+          "INACTIVE"
+        ],
+        "description": "Status of the customer"
+      }
+    }
+  },
+  "x-ibm-configuration": {}
+}

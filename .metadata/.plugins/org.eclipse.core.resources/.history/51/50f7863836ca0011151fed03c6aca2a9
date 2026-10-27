@@ -1,0 +1,68 @@
+-- =============================================================================
+-- PostgreSQL Database Schema for Accounts REST API
+-- Project: Accounts
+-- IBM App Connect Enterprise (ACE) / ESQL Integration
+-- =============================================================================
+
+-- 1. Create table public.transactions
+CREATE TABLE IF NOT EXISTS public.accounts (
+    account_id       VARCHAR(64)    NOT NULL,
+    customer_id      VARCHAR(64)    NOT NULL,
+    account_type     VARCHAR(20)    NOT NULL CHECK (transaction_type IN ('SAVINGS', 'CHECK', 'CREDIT')),
+    balance          NUMERIC(20, 2) NOT NULL,
+    currency         VARCHAR(3)     NOT NULL DEFAULT 'USD',
+    status           VARCHAR(20)    NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'INACTIVE')),
+    CONSTRAINT pk_accounts PRIMARY KEY (account_id)
+);
+
+-- 2. Indexes for query optimization
+CREATE INDEX IF NOT EXISTS idx_accounts_customer_id 
+    ON public.accounts(account_id);
+
+CREATE INDEX IF NOT EXISTS idx_accounts_status 
+    ON public.accounts(status);
+
+-- 3. Optional sample test records
+INSERT INTO accounts (account_id, customer_id, account_type, balance, currency, status) VALUES 
+('ACC-1001', 'Alice Smith', 'SAVINGS', 1500.50, 'USD', 'ACTIVE'),
+('ACC-1002', 'Bob Jones', 'CHECKING', 3420.00, 'USD', 'ACTIVE'),
+('ACC-1003', 'Charlie Brown', 'CREDIT', -450.25, 'USD', 'INACTIVE'),
+('ACC-1004', 'Diana Prince', 'SAVINGS', 12500.00, 'EUR', 'ACTIVE'),
+('ACC-1005', 'Evan Wright', 'CHECKING', 89.50, 'GBP', 'ACTIVE'),
+('ACC-1006', 'Fiona Gallagher', 'CREDIT', -1200.00, 'USD', 'INACTIVE'),
+('ACC-1007', 'George Clark', 'SAVINGS', 5430.75, 'AUD', 'ACTIVE'),
+('ACC-1008', 'Hannah Abbott', 'CHECKING', 210.00, 'CAD', 'ACTIVE'),
+('ACC-1009', 'Ian Malcolm', 'CREDIT', 0.00, 'USD', 'ACTIVE'),
+('ACC-1010', 'Julia Roberts', 'SAVINGS', 45000.00, 'USD', 'INACTIVE')
+ON CONFLICT (account_id) DO NOTHING;
+
+-- =============================================================================
+-- IBM App Connect Enterprise ODBC Setup Guide for PostgreSQL
+-- =============================================================================
+--
+-- 1. odbc.ini configuration (e.g. /var/mqsi/odbc/odbc.ini or $ODBCINI):
+--
+--    [ODBC Data Sources]
+--    MY_PG_DSN=PostgreSQL Wire Protocol
+--
+--    [MY_PG_DSN]
+--    Driver=/opt/ibm/ace-13.0.9.0/server/ODBC/drivers/lib/UKsqls95.so  (or DataDirect / psqlODBC driver)
+--    Description=IBM App Connect Enterprise PostgreSQL Wire Protocol
+--    Database=banking_db
+--    HostName=localhost
+--    PortNumber=5432
+--    LogonID=postgres
+--    Password=secret
+--
+-- 2. Configure credentials in ACE Integration Node / Server using mqsisetdbparms:
+--
+--    mqsisetdbparms <IntegrationNodeName> -n odbc::MY_PG_DSN -u <dbuser> -p <dbpassword>
+--
+--    For independent integration server:
+--    mqsisetdbparms --work-dir <work-dir> -n odbc::MY_PG_DSN -u <dbuser> -p <dbpassword>
+--
+-- 3. Verify connection:
+--
+--    mqsicvp <IntegrationNodeName> -n MY_PG_DSN
+--
+-- =============================================================================

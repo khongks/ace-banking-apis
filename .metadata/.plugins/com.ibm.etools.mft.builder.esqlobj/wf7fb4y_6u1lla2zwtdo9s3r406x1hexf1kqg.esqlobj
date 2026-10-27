@@ -1,0 +1,131 @@
+/*EATE FUNCTION Main() RETURNS BOOLE*/
+	BEGIN
+		-- 1. Copy headers to preserve HTTP transport context downstream
+		CALL CopyMessageHeaders();
+				
+		-- 2. Reference Input JSON Data
+		DECLARE inputDataRef REFERENCE TO InputRoot.JSON.Data;
+		
+		-- 3. Reference Output JSON Data
+		CREATE FIELD OutputRoot.JSON.Data;
+		DECLARE outputDataRef REFERENCE TO OutputRoot.JSON.Data;
+
+		-- 4. Check JSON Data Exist
+		IF NOT LASTMOVE(inputDataRef) THEN
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '400';
+			SET outputDataRef.error = 'Bad Request';
+			SET outputDataRef.message = 'No JSON data found in input message.';
+			RETURN TRUE;
+		END IF;
+		
+		-- 5. Extract and map input data fields using FIELDVALUE, required fields: accountId, amount, transactionType
+		DECLARE v_AccountId CHARACTER FIELDVALUE(inputDataRef.accountId);
+		DECLARE v_Amount DECIMAL FIELDVALUE(inputDataRef.amount);
+		DECLARE v_TransactionType CHARACTER FIELDVALUE(inputDataRef.transactionType);
+		DECLARE v_Currency CHARACTER COALESCE(FIELDVALUE(inputDataRef.currency), 'AUD');
+		DECLARE v_Status CHARACTER COALESCE(FIELDVALUE(inputDataRef.status), 'COMPLETED');
+		DECLARE v_Description CHARACTER COALESCE(FIELDVALUE(inputDataRef.description), '');
+		DECLARE v_TransactionId CHARACTER;
+				
+		-- 6. Validate mandatory and enum fields
+		IF v_AccountId IS NULL OR v_AccountId = '' THEN
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '400';
+			SET outputDataRef.error = 'Validation Error';
+			SET outputDataRef.message = 'accountId is required';
+			RETURN TRUE;
+		END IF;
+		
+		IF v_Amount IS NULL THEN
+			SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 400;
+			SET outputDataRef.error = 'Validation Error';
+			SET outputDataRef.message = 'amount is required';
+			RETURN TRUE;
+		END IF;
+		
+		IF v_TransactionType IS NULL OR v_TransactionType = '' THEN
+			SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 400;
+			SET outputDataRef.error = 'Validation Error';
+			SET outputDataRef.message = 'transactionType is required';
+			RETURN TRUE;
+		END IF;
+		
+		IF v_TransactionType NOT IN ('DEPOSIT', 'WITHDRAWAL', 'TRANSFER', 'PAYMENT') THEN
+			SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 400;
+			SET outputDataRef.error = 'Validation Error';
+			SET outputDataRef.message = 'transactionType must be DEPOSIT, WITHDRAWAL, TRANSFER, or PAYMENT';
+			RETURN TRUE;
+		END IF;
+		
+		IF v_Status NOT IN ('PENDING', 'COMPLETED', 'FAILED', 'CANCELLED') THEN
+			SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 400;
+			SET outputDataRef.error = 'Validation Error';
+			SET outputDataRef.message = 'status must be PENDING, COMPLETED, FAILED, or CANCELLED';
+			RETURN TRUE;
+		END IF;
+			
+		-- 7. Generate TransactionId
+		DECLARE part1 CHARACTER CAST(CAST(RAND() * 899999 + 100000 AS INTEGER) AS CHARACTER);
+		DECLARE part2 CHARACTER CAST(CAST(RAND() * 899999 + 100000 AS INTEGER) AS CHARACTER);
+		SET v_TransactionId = 'TXN-' || part1 || part2;
+		
+		-- 8. Insert record into PostgreSQL database
+		DECLARE DBSchema CHARACTER 'public';
+		DECLARE DBTable  CHARACTER 'transactions';
+		
+		DECLARE v_CreatedDate TIMESTAMP CURRENT_TIMESTAMP;
+		DECLARE v_UpdatedDate TIMESTAMP CURRENT_TIMESTAMP;
+		
+		INSERT INTO Database.{DBSchema}.{DBTable} (
+			transaction_id,
+			account_id,
+			amount,
+			currency,
+			transaction_type,
+			status,
+			description,
+			created_date,
+			updated_date
+		) VALUES (
+			v_TransactionId,
+			v_AccountId,
+			v_Amount,
+			v_Currency,
+			v_TransactionType,
+			v_Status,
+			v_Description,
+			v_CreatedDate,
+			v_UpdatedDate
+		);
+		
+		IF (SQLCODE = 0) THEN
+			-- 9. Construct 201 Created response
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '201';
+			-- SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 201;
+			SET outputDataRef.status = 'success';
+			SET outputDataRef.message = 'Transaction ' || v_TransactionId || ' created successfully.';
+			SET outputDataRef.Transaction.TransactionId = v_TransactionId;
+			SET outputDataRef.Transaction.AccountId = v_AccountId;
+			SET outputDataRef.Transaction.Amount = v_Amount;
+			SET outputDataRef.Transaction.Currency = v_Currency;
+			SET outputDataRef.Transaction.TransactionType = v_TransactionType;
+			SET outputDataRef.Transaction.Status = v_Status;
+			SET outputDataRef.Transaction.Description = v_Description;
+			SET outputDataRef.Transaction.createdDate = v_CreatedDate;
+			SET outputDataRef.Transaction.updatedDate = v_UpdatedDate;
+		ELSE
+			SET OutputRoot.HTTPResponseHeader."X-Original-HTTP-Status-Code" = '500';
+			SET outputDataRef.error   = 'SQL Error';
+			SET outputDataRef.message = 'Insert operation failed. The database SQLSTATE was ' || CAST(SQLSTATE AS CHAR) || ' and the SQLCODE was ' || CAST(SQLCODE AS CHAR);
+		END IF;		
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;

@@ -1,0 +1,110 @@
+/*EATE FUNCTION Main() RETURNS BOOLE*/
+	BEGIN
+		-- 1. Copy headers to preserve HTTP transport context
+		CALL CopyMessageHeaders();
+		
+		-- 2. Extract path parameter
+		DECLARE v_TransactionId CHAR InputLocalEnvironment.REST.Input.Parameters.transactionId;
+		
+		DECLARE DBSchema CHARACTER 'public';
+		DECLARE DBTable  CHARACTER 'transactions';
+
+		-- 3. Check if target transaction exists in PostgreSQL
+		DECLARE transaction ROW;
+		SET transaction = THE(
+			SELECT * FROM Database.{DBSchema}.{DBTable} AS T
+			WHERE T.transaction_id = v_TransactionId
+		);
+		
+		IF transaction.transaction_id IS NULL THEN
+			SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 404;
+			CREATE FIELD OutputRoot.JSON.Data;
+			SET OutputRoot.JSON.Data.error = 'Transaction Not Found';
+			SET OutputRoot.JSON.Data.requested_id = transactionId;
+			SET OutputRoot.JSON.Data.details = 'The transaction ID provided does not exist.';
+			RETURN TRUE;
+		END IF;
+		
+		-- 4. Establish input reference
+		DECLARE inputData REFERENCE TO InputRoot.JSON.Data;
+		IF NOT LASTMOVE(inputData) THEN
+			SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 400;
+			CREATE FIELD OutputRoot.JSON.Data;
+			SET OutputRoot.JSON.Data.error = 'Bad Request';
+			SET OutputRoot.JSON.Data.details = 'Missing JSON payload for update.';
+			RETURN TRUE;
+		END IF;
+		
+		-- 5. Extract fields using FIELDVALUE
+		DECLARE newAccountId CHARACTER FIELDVALUE(inputData.accountId);
+		DECLARE newAmount DECIMAL FIELDVALUE(inputData.amount);
+		DECLARE newCurrency CHARACTER FIELDVALUE(inputData.currency);
+		DECLARE newTxType CHARACTER FIELDVALUE(inputData.transactionType);
+		DECLARE newStatus CHARACTER FIELDVALUE(inputData.status);
+		DECLARE newDesc CHARACTER FIELDVALUE(inputData.description);
+		
+		-- Validate transactionType if provided
+		IF newTxType IS NOT NULL AND newTxType NOT IN ('DEPOSIT', 'WITHDRAWAL', 'TRANSFER', 'PAYMENT') THEN
+			SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 400;
+			CREATE FIELD OutputRoot.JSON.Data;
+			SET OutputRoot.JSON.Data.error = 'Validation Error';
+			SET OutputRoot.JSON.Data.details = 'transactionType must be DEPOSIT, WITHDRAWAL, TRANSFER, or PAYMENT';
+			RETURN TRUE;
+		END IF;
+		
+		-- Validate status if provided
+		IF newStatus IS NOT NULL AND newStatus NOT IN ('PENDING', 'COMPLETED', 'FAILED', 'CANCELLED') THEN
+			SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 400;
+			CREATE FIELD OutputRoot.JSON.Data;
+			SET OutputRoot.JSON.Data.error = 'Validation Error';
+			SET OutputRoot.JSON.Data.details = 'status must be PENDING, COMPLETED, FAILED, or CANCELLED';
+			RETURN TRUE;
+		END IF;
+		
+		-- Merge values: update specified fields, retain existing for omitted fields
+		DECLARE finalAccountId CHARACTER COALESCE(newAccountId, existingTx.account_id, existingTx.ACCOUNT_ID);
+		DECLARE finalAmount DECIMAL COALESCE(newAmount, existingTx.amount, existingTx.AMOUNT);
+		DECLARE finalCurrency CHARACTER COALESCE(newCurrency, existingTx.currency, existingTx.CURRENCY);
+		DECLARE finalTxType CHARACTER COALESCE(newTxType, existingTx.transaction_type, existingTx.TRANSACTION_TYPE);
+		DECLARE finalStatus CHARACTER COALESCE(newStatus, existingTx.status, existingTx.STATUS);
+		DECLARE finalDesc CHARACTER COALESCE(newDesc, existingTx.description, existingTx.DESCRIPTION);
+		
+		-- 6. Perform database update in PostgreSQL
+		UPDATE Database.{DBSchema}.{DBTable} AS T
+		SET account_id = finalAccountId,
+		    amount = finalAmount,
+		    currency = finalCurrency,
+		    transaction_type = finalTxType,
+		    status = finalStatus,
+		    description = finalDesc,
+		    updated_date = CURRENT_TIMESTAMP
+		WHERE T.transaction_id = transactionId;
+		
+		-- 7. Construct 200 OK response
+		SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 200;
+		CREATE FIELD OutputRoot.JSON.Data;
+		DECLARE outputData REFERENCE TO OutputRoot.JSON.Data;
+		SET outputData.status = 'success';
+		SET outputData.message = 'Transaction ' || transactionId || ' updated successfully.';
+		SET outputData.transactionDetails.transactionId = transactionId;
+		SET outputData.transactionDetails.accountId = finalAccountId;
+		SET outputData.transactionDetails.amount = finalAmount;
+		SET outputData.transactionDetails.currency = finalCurrency;
+		SET outputData.transactionDetails.transactionType = finalTxType;
+		SET outputData.transactionDetails.status = finalStatus;
+		SET outputData.transactionDetails.description = finalDesc;
+		SET outputData.transactionDetails.createdDate = COALESCE(existingTx.created_date, existingTx.CREATED_DATE);
+		SET outputData.transactionDetails.updatedDate = CURRENT_TIMESTAMP;
+		
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;

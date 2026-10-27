@@ -1,0 +1,76 @@
+CREATE COMPUTE MODULE putAccountsAccountId_Compute
+    CREATE FUNCTION Main() RETURNS BOOLEAN
+    BEGIN
+        SET OutputRoot.Properties = InputRoot.Properties;
+
+        -- Extract Path Parameter
+        DECLARE accId CHARACTER InputLocalEnvironment.REST.Input.Parameters.accountId;
+        IF accId IS NULL OR TRIM(accId) = '' THEN
+            CALL SetHttpError(400, 'ERR_MISSING_PARAMETER', 'Path parameter accountId is required.');
+            RETURN TRUE;
+        END IF;
+
+        -- Verify Account Existence in Database
+        DECLARE dbCheck ROW;
+        SET dbCheck.Account[] = PASSTHRU('SELECT account_id, customer_name, account_type, balance, currency, status FROM accounts WHERE account_id = ?'
+            TO Database.{MY_PG_DSN}
+            VALUES(accId));
+
+        IF CARDINALITY(dbCheck.Account[]) = 0 THEN
+            CALL SetHttpError(404, 'ERR_ACCOUNT_NOT_FOUND', 'Account with ID ''' || accId || ''' was not found.');
+            RETURN TRUE;
+        END IF;
+
+        -- Validate Request Payload
+        DECLARE inData REFERENCE TO InputRoot.JSON.Data;
+        IF NOT LASTMOVE(inData) THEN
+            CALL SetHttpError(400, 'ERR_INVALID_BODY', 'Missing or invalid JSON request payload.');
+            RETURN TRUE;
+        END IF;
+
+        -- Merge existing values with updated values
+        DECLARE currentAcc REFERENCE TO dbCheck.Account[1];
+        DECLARE updatedCustName CHARACTER COALESCE(FIELDVALUE(inData.CustomerName), currentAcc.customer_name);
+        DECLARE updatedAccType  CHARACTER COALESCE(FIELDVALUE(inData.AccountType), currentAcc.account_type);
+        DECLARE updatedBalance  DECIMAL   COALESCE(CAST(FIELDVALUE(inData.Balance) AS DECIMAL), CAST(currentAcc.balance AS DECIMAL));
+        DECLARE updatedCurrency CHARACTER COALESCE(FIELDVALUE(inData.Currency), currentAcc.currency);
+        DECLARE updatedStatus   CHARACTER COALESCE(FIELDVALUE(inData.Status), currentAcc.status);
+
+        -- Validate Updated Enum Constraints
+        IF updatedAccType NOT IN ('SAVINGS', 'CHECKING', 'CREDIT') THEN
+            CALL SetHttpError(400, 'ERR_INVALID_ACCOUNT_TYPE', 'AccountType must be one of: SAVINGS, CHECKING, CREDIT.');
+            RETURN TRUE;
+        END IF;
+
+        IF updatedStatus NOT IN ('ACTIVE', 'INACTIVE') THEN
+            CALL SetHttpError(400, 'ERR_INVALID_STATUS', 'Status must be ACTIVE or INACTIVE.');
+            RETURN TRUE;
+        END IF;
+
+        -- Execute SQL UPDATE statement
+        DECLARE currentTs CHARACTER CAST(CURRENT_TIMESTAMP AS CHARACTER FORMAT 'yyyy-MM-dd HH:mm:ss');
+        PASSTHRU('UPDATE accounts SET customer_name = ?, account_type = ?, balance = ?, currency = ?, status = ?, updated_at = ? WHERE account_id = ?'
+            TO Database.{MY_PG_DSN}
+            VALUES(updatedCustName, updatedAccType, updatedBalance, updatedCurrency, updatedStatus, currentTs, accId));
+
+        IF SQLCODE <> 0 THEN
+            CALL SetHttpError(500, 'ERR_DATABASE_UPDATE', 'Database error during account update: ' || COALESCE(SQLERRORTEXT, 'Unknown SQL Error'));
+            RETURN TRUE;
+        END IF;
+
+        -- Populate HTTP 200 OK Response
+        SET OutputLocalEnvironment.Destination.HTTP.ReplyStatusCode = 200;
+        CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+        CREATE FIELD OutputRoot.JSON.Data;
+        DECLARE outData REFERENCE TO OutputRoot.JSON.Data;
+
+        SET outData.AccountId    = accId;
+        SET outData.CustomerName  = updatedCustName;
+        SET outData.AccountType   = updatedAccType;
+        SET outData.Balance       = updatedBalance;
+        SET outData.Currency      = updatedCurrency;
+        SET outData.Status        = updatedStatus;
+
+        RETURN TRUE;
+    END;
+END MODULE;

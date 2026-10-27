@@ -1,0 +1,12 @@
+CREATE COMPUTE MODULE listAccounts_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- Build JSON array response
+		SET OutputRoot.Properties = InputRoot.Properties;
+		CREATE LASTCHILD OF OutputRoot DOMAIN 'JSON';
+		CREATE FIELD OutputRoot.JSON.Data IDENTITY (JSON.Array)Data;
+		
+		OutputRoot.JSON.Data.accounts[] = (SELECT A FROM Database.accounts as A);
+		RETURN TRUE;
+	END;
+END MODULE;
